@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,8 +16,10 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/config"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/auth"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/handler"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/server"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/service"
 	"github.com/KozhabergenovNurzhan/E-commerce/pkg/logger"
 )
@@ -28,6 +29,7 @@ func main() {
 	log := logger.New("ecommerce", cfg.LogLevel)
 	slog.SetDefault(log)
 
+	// ── Database ──────────────────────────────────────────────────────────────
 	db, err := sqlx.Connect("pgx", cfg.DB.DSN())
 	if err != nil {
 		log.Error("failed to connect to postgres", slog.String("err", err.Error()))
@@ -39,6 +41,7 @@ func main() {
 	db.SetConnMaxLifetime(5 * time.Minute)
 	log.Info("connected to postgres")
 
+	// ── Migrations ────────────────────────────────────────────────────────────
 	m, err := migrate.New("file://migrations", cfg.DB.MigrateURL())
 	if err != nil {
 		log.Error("failed to init migrations", slog.String("err", err.Error()))
@@ -50,32 +53,33 @@ func main() {
 	}
 	log.Info("migrations applied")
 
+	// ── Auth ──────────────────────────────────────────────────────────────────
+	authMgr := auth.NewJWTManager(cfg.JWT.Secret, cfg.JWT.AccessTTL)
+
+	// ── Repositories ──────────────────────────────────────────────────────────
 	userRepo    := repository.NewUserRepository(db)
 	productRepo := repository.NewProductRepository(db)
 	orderRepo   := repository.NewOrderRepository(db)
 	tokenRepo   := repository.NewTokenRepository(db)
 
+	// ── Services ──────────────────────────────────────────────────────────────
 	svc := service.NewServices(
 		service.NewUserService(userRepo),
 		service.NewProductService(productRepo),
 		service.NewOrderService(orderRepo, productRepo),
-		service.NewTokenService(tokenRepo, userRepo, cfg.JWT.Secret, cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL),
+		service.NewTokenService(tokenRepo, userRepo, authMgr, cfg.JWT.RefreshTTL),
 	)
 
-	h := handler.NewHandler(svc, log)
+	// ── Handler + routes ──────────────────────────────────────────────────────
+	h := handler.NewHandler(svc, authMgr, log)
 	engine := h.InitRoutes()
 
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%s", cfg.Port),
-		Handler:      engine,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
+	// ── Server ────────────────────────────────────────────────────────────────
+	srv := server.New(cfg.Port, engine)
 
 	go func() {
 		log.Info("server starting", slog.String("port", cfg.Port))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.Run(); err != nil && err != http.ErrServerClosed {
 			log.Error("server error", slog.String("err", err.Error()))
 			os.Exit(1)
 		}

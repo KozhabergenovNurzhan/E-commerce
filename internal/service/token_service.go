@@ -7,23 +7,16 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/auth"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
 	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
 )
 
-type Claims struct {
-	UserID uuid.UUID   `json:"user_id"`
-	Role   domain.Role `json:"role"`
-	jwt.RegisteredClaims
-}
-
 type TokenService interface {
 	GenerateTokenPair(ctx context.Context, userID uuid.UUID, role domain.Role) (*domain.AuthTokens, error)
-	ValidateAccessToken(token string) (*Claims, error)
 	Refresh(ctx context.Context, refreshToken string) (*domain.AuthTokens, error)
 	Revoke(ctx context.Context, refreshToken string) error
 }
@@ -31,28 +24,26 @@ type TokenService interface {
 type tokenService struct {
 	repo       repository.TokenRepository
 	userRepo   repository.UserRepository
-	secret     []byte
-	accessTTL  time.Duration
+	authMgr    auth.Manager
 	refreshTTL time.Duration
 }
 
 func NewTokenService(
 	repo repository.TokenRepository,
 	userRepo repository.UserRepository,
-	secret string,
-	accessTTL, refreshTTL time.Duration,
+	authMgr auth.Manager,
+	refreshTTL time.Duration,
 ) TokenService {
 	return &tokenService{
 		repo:       repo,
 		userRepo:   userRepo,
-		secret:     []byte(secret),
-		accessTTL:  accessTTL,
+		authMgr:    authMgr,
 		refreshTTL: refreshTTL,
 	}
 }
 
 func (s *tokenService) GenerateTokenPair(ctx context.Context, userID uuid.UUID, role domain.Role) (*domain.AuthTokens, error) {
-	accessToken, err := s.generateAccessToken(userID, role)
+	accessToken, err := s.authMgr.GenerateAccessToken(userID, role)
 	if err != nil {
 		return nil, apperrors.ErrInternal
 	}
@@ -65,21 +56,8 @@ func (s *tokenService) GenerateTokenPair(ctx context.Context, userID uuid.UUID, 
 	return &domain.AuthTokens{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		ExpiresIn:    int64(s.accessTTL.Seconds()),
+		ExpiresIn:    int64(s.authMgr.AccessTTL().Seconds()),
 	}, nil
-}
-
-func (s *tokenService) generateAccessToken(userID uuid.UUID, role domain.Role) (string, error) {
-	claims := &Claims{
-		UserID: userID,
-		Role:   role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.accessTTL)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			ID:        uuid.New().String(),
-		},
-	}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.secret)
 }
 
 func (s *tokenService) generateRefreshToken(ctx context.Context, userID uuid.UUID) (string, error) {
@@ -101,23 +79,6 @@ func (s *tokenService) generateRefreshToken(ctx context.Context, userID uuid.UUI
 		return "", err
 	}
 	return raw, nil
-}
-
-func (s *tokenService) ValidateAccessToken(token string) (*Claims, error) {
-	parsed, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, apperrors.ErrUnauthorized
-		}
-		return s.secret, nil
-	})
-	if err != nil || !parsed.Valid {
-		return nil, apperrors.ErrUnauthorized
-	}
-	claims, ok := parsed.Claims.(*Claims)
-	if !ok {
-		return nil, apperrors.ErrUnauthorized
-	}
-	return claims, nil
 }
 
 func (s *tokenService) Refresh(ctx context.Context, refreshToken string) (*domain.AuthTokens, error) {

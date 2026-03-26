@@ -7,12 +7,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/middleware"
 	"github.com/KozhabergenovNurzhan/E-commerce/pkg/response"
 )
 
 // POST /api/v1/orders
 func (h *Handler) CreateOrder(c *gin.Context) {
-	userID := mustUserID(c)
+	userID := middleware.MustUserID(c)
 
 	var req domain.CreateOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -31,7 +32,7 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 
 // GET /api/v1/orders
 func (h *Handler) ListOrders(c *gin.Context) {
-	userID := mustUserID(c)
+	userID := middleware.MustUserID(c)
 
 	var q struct {
 		Page  int `form:"page,default=1"`

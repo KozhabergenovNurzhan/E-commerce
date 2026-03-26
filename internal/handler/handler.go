@@ -7,16 +7,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/auth"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/middleware"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/service"
 )
 
 type Handler struct {
 	services *service.Services
+	authMgr  auth.Manager
 	logger   *slog.Logger
 }
 
-func NewHandler(services *service.Services, logger *slog.Logger) *Handler {
-	return &Handler{services: services, logger: logger}
+func NewHandler(services *service.Services, authMgr auth.Manager, logger *slog.Logger) *Handler {
+	return &Handler{services: services, authMgr: authMgr, logger: logger}
 }
 
 func (h *Handler) InitRoutes() *gin.Engine {
@@ -45,23 +49,26 @@ func (h *Handler) InitRoutes() *gin.Engine {
 	api.GET("/categories",   h.ListCategories)
 
 	// ── Protected: JWT required ───────────────────────────────────────────────
-	protected := api.Group("", JWTMiddleware(h.services.Token))
+	protected := api.Group("", middleware.Auth(h.authMgr))
 	{
+		// Users — list/delete restricted to admin
 		users := protected.Group("/users")
 		{
-			users.GET("",          h.ListUsers)
-			users.GET("/:id",      h.GetUserByID)
-			users.PUT("/:id",      h.UpdateUser)
-			users.DELETE("/:id",   h.DeleteUser)
+			users.GET("",        middleware.RequireRole(domain.RoleAdmin), h.ListUsers)
+			users.GET("/:id",    h.GetUserByID)
+			users.PUT("/:id",    h.UpdateUser)
+			users.DELETE("/:id", middleware.RequireRole(domain.RoleAdmin), h.DeleteUser)
 		}
 
+		// Products — write operations restricted to admin
 		products := protected.Group("/products")
 		{
-			products.POST("",       h.CreateProduct)
-			products.PUT("/:id",    h.UpdateProduct)
-			products.DELETE("/:id", h.DeleteProduct)
+			products.POST("",       middleware.RequireRole(domain.RoleAdmin), h.CreateProduct)
+			products.PUT("/:id",    middleware.RequireRole(domain.RoleAdmin), h.UpdateProduct)
+			products.DELETE("/:id", middleware.RequireRole(domain.RoleAdmin), h.DeleteProduct)
 		}
 
+		// Orders — any authenticated user
 		orders := protected.Group("/orders")
 		{
 			orders.POST("",             h.CreateOrder)
@@ -83,11 +90,11 @@ func (h *Handler) requestLogger() gin.HandlerFunc {
 		start := time.Now()
 		c.Next()
 		h.logger.Info("request",
-			slog.String("method",   c.Request.Method),
-			slog.String("path",     c.Request.URL.Path),
-			slog.Int("status",      c.Writer.Status()),
+			slog.String("method",    c.Request.Method),
+			slog.String("path",      c.Request.URL.Path),
+			slog.Int("status",       c.Writer.Status()),
 			slog.Duration("latency", time.Since(start)),
-			slog.String("ip",       c.ClientIP()),
+			slog.String("ip",        c.ClientIP()),
 		)
 	}
 }
