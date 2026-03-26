@@ -62,6 +62,13 @@ func (r *orderRepository) Create(ctx context.Context, order *domain.Order) error
 		rows.Close()
 	}
 
+	const qStock = `UPDATE products SET stock = stock - $1 WHERE id = $2`
+	for _, item := range order.Items {
+		if _, err := tx.ExecContext(ctx, qStock, item.Quantity, item.ProductID); err != nil {
+			return apperrors.ErrInternal
+		}
+	}
+
 	return tx.Commit()
 }
 
