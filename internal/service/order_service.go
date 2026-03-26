@@ -2,11 +2,11 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
 	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
+	"github.com/KozhabergenovNurzhan/E-commerce/pkg/utils"
 )
 
 type OrderService interface {
@@ -45,7 +45,7 @@ func (s *orderService) Create(ctx context.Context, userID int64, req *domain.Cre
 		})
 	}
 
-	now := time.Now().UTC()
+	now := utils.Now()
 	order := &domain.Order{
 		UserID:     userID,
 		Status:     domain.OrderStatusPending,

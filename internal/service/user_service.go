@@ -2,13 +2,13 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
 	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
+	"github.com/KozhabergenovNurzhan/E-commerce/pkg/utils"
 )
 
 type UserService interface {
@@ -34,7 +34,7 @@ func (s *userService) Register(ctx context.Context, req *domain.RegisterRequest)
 		return nil, apperrors.ErrInternal
 	}
 
-	now := time.Now().UTC()
+	now := utils.Now()
 	user := &domain.User{
 		Email:        req.Email,
 		PasswordHash: string(hash),
@@ -80,7 +80,7 @@ func (s *userService) Update(ctx context.Context, id int64, firstName, lastName 
 	}
 	user.FirstName = firstName
 	user.LastName = lastName
-	user.UpdatedAt = time.Now().UTC()
+	user.UpdatedAt = utils.Now()
 	if err := s.repo.Update(ctx, user); err != nil {
 		return nil, err
 	}

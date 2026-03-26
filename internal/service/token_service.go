@@ -11,6 +11,7 @@ import (
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
 	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
+	"github.com/KozhabergenovNurzhan/E-commerce/pkg/utils"
 )
 
 type TokenService interface {
@@ -68,9 +69,9 @@ func (s *tokenService) generateRefreshToken(ctx context.Context, userID int64) (
 	rt := &domain.RefreshToken{
 		UserID:    userID,
 		TokenHash: hashToken(raw),
-		ExpiresAt: time.Now().Add(s.refreshTTL),
+		ExpiresAt: utils.Now().Add(s.refreshTTL),
 		Revoked:   false,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: utils.Now(),
 	}
 	if err := s.repo.Save(ctx, rt); err != nil {
 		return "", err
@@ -85,7 +86,7 @@ func (s *tokenService) Refresh(ctx context.Context, refreshToken string) (*domai
 	if err != nil {
 		return nil, apperrors.ErrUnauthorized
 	}
-	if rt.Revoked || time.Now().After(rt.ExpiresAt) {
+	if rt.Revoked || utils.Now().After(rt.ExpiresAt) {
 		return nil, apperrors.ErrUnauthorized
 	}
 

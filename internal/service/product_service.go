@@ -2,10 +2,10 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
+	"github.com/KozhabergenovNurzhan/E-commerce/pkg/utils"
 )
 
 type ProductService interface {
@@ -26,7 +26,7 @@ func NewProductService(repo repository.ProductRepository) ProductService {
 }
 
 func (s *productService) Create(ctx context.Context, req *domain.CreateProductRequest) (*domain.Product, error) {
-	now := time.Now().UTC()
+	now := utils.Now()
 	p := &domain.Product{
 		CategoryID:  req.CategoryID,
 		Name:        req.Name,
@@ -58,7 +58,7 @@ func (s *productService) Update(ctx context.Context, id int64, req *domain.Updat
 	p.Price = req.Price
 	p.Stock = req.Stock
 	p.ImageURL = req.ImageURL
-	p.UpdatedAt = time.Now().UTC()
+	p.UpdatedAt = utils.Now()
 	if err := s.repo.Update(ctx, p); err != nil {
 		return nil, err
 	}
