@@ -15,9 +15,6 @@
 # Go modules
 vendor/
 
-# Dependency directories (if not using modules)
-pkg/
-
 # Go workspace file
 go.work
 
@@ -46,3 +43,6 @@ temp/
 
 # Generated files (optional)
 *.gen.go
+
+# Claude Code internal files
+.claude/
