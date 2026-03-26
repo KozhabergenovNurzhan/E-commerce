@@ -29,40 +29,18 @@ func main() {
 	log := logger.New("ecommerce", cfg.LogLevel)
 	slog.SetDefault(log)
 
-	// ── Database ──────────────────────────────────────────────────────────────
-	db, err := sqlx.Connect("pgx", cfg.DB.DSN())
-	if err != nil {
-		log.Error("failed to connect to postgres", slog.String("err", err.Error()))
-		os.Exit(1)
-	}
+	db := mustConnectDB(cfg.DB, log)
 	defer db.Close()
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	log.Info("connected to postgres")
 
-	// ── Migrations ────────────────────────────────────────────────────────────
-	m, err := migrate.New("file://migrations", cfg.DB.MigrateURL())
-	if err != nil {
-		log.Error("failed to init migrations", slog.String("err", err.Error()))
-		os.Exit(1)
-	}
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		log.Error("migration failed", slog.String("err", err.Error()))
-		os.Exit(1)
-	}
-	log.Info("migrations applied")
+	runMigrations(cfg.DB, log)
 
-	// ── Auth ──────────────────────────────────────────────────────────────────
 	authMgr := auth.NewJWTManager(cfg.JWT.Secret, cfg.JWT.AccessTTL)
 
-	// ── Repositories ──────────────────────────────────────────────────────────
 	userRepo    := repository.NewUserRepository(db)
 	productRepo := repository.NewProductRepository(db)
 	orderRepo   := repository.NewOrderRepository(db)
 	tokenRepo   := repository.NewTokenRepository(db)
 
-	// ── Services ──────────────────────────────────────────────────────────────
 	svc := service.NewServices(
 		service.NewUserService(userRepo),
 		service.NewProductService(productRepo),
@@ -70,12 +48,8 @@ func main() {
 		service.NewTokenService(tokenRepo, userRepo, authMgr, cfg.JWT.RefreshTTL),
 	)
 
-	// ── Handler + routes ──────────────────────────────────────────────────────
 	h := handler.NewHandler(svc, authMgr, log)
-	engine := h.InitRoutes()
-
-	// ── Server ────────────────────────────────────────────────────────────────
-	srv := server.New(cfg.Port, engine)
+	srv := server.New(cfg.Port, h.InitRoutes())
 
 	go func() {
 		log.Info("server starting", slog.String("port", cfg.Port))
@@ -96,4 +70,30 @@ func main() {
 		log.Error("shutdown error", slog.String("err", err.Error()))
 	}
 	log.Info("server stopped")
+}
+
+func mustConnectDB(cfg config.DBConfig, log *slog.Logger) *sqlx.DB {
+	db, err := sqlx.Connect("pgx", cfg.DSN())
+	if err != nil {
+		log.Error("failed to connect to postgres", slog.String("err", err.Error()))
+		os.Exit(1)
+	}
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	log.Info("connected to postgres")
+	return db
+}
+
+func runMigrations(cfg config.DBConfig, log *slog.Logger) {
+	m, err := migrate.New("file://migrations", cfg.MigrateURL())
+	if err != nil {
+		log.Error("failed to init migrations", slog.String("err", err.Error()))
+		os.Exit(1)
+	}
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		log.Error("migration failed", slog.String("err", err.Error()))
+		os.Exit(1)
+	}
+	log.Info("migrations applied")
 }
