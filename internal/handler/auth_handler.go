@@ -96,5 +96,17 @@ func (h *Handler) Logout(c *gin.Context) {
 
 // GET /health
 func (h *Handler) Health(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "ecommerce"})
+	if err := h.db.PingContext(c.Request.Context()); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "unavailable",
+			"service": "ecommerce",
+			"db":      "unreachable",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "ok",
+		"service": "ecommerce",
+		"db":      "ok",
+	})
 }

@@ -85,7 +85,7 @@ func buildApp(cfg *config.Config, log *slog.Logger) (*gin.Engine, error) {
 		service.NewCartService(cartRepo, productRepo),
 	)
 
-	h := handler.NewHandler(svc, authMgr, log)
+	h := handler.NewHandler(svc, authMgr, log, db)
 	return h.InitRoutes(), nil
 }
 

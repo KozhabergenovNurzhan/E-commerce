@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jmoiron/sqlx"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/auth"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
@@ -17,10 +18,11 @@ type Handler struct {
 	services *service.Services
 	authMgr  auth.Manager
 	logger   *slog.Logger
+	db       *sqlx.DB
 }
 
-func NewHandler(services *service.Services, authMgr auth.Manager, logger *slog.Logger) *Handler {
-	return &Handler{services: services, authMgr: authMgr, logger: logger}
+func NewHandler(services *service.Services, authMgr auth.Manager, logger *slog.Logger, db *sqlx.DB) *Handler {
+	return &Handler{services: services, authMgr: authMgr, logger: logger, db: db}
 }
 
 func (h *Handler) InitRoutes() *gin.Engine {
