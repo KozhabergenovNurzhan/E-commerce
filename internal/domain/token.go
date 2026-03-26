@@ -1,14 +1,10 @@
 package domain
 
-import (
-	"time"
-
-	"github.com/google/uuid"
-)
+import "time"
 
 type RefreshToken struct {
-	ID        uuid.UUID `db:"id"`
-	UserID    uuid.UUID `db:"user_id"`
+	ID        int64     `db:"id"`
+	UserID    int64     `db:"user_id"`
 	TokenHash string    `db:"token_hash"`
 	ExpiresAt time.Time `db:"expires_at"`
 	Revoked   bool      `db:"revoked"`

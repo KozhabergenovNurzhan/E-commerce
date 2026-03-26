@@ -1,10 +1,6 @@
 package domain
 
-import (
-	"time"
-
-	"github.com/google/uuid"
-)
+import "time"
 
 type Role string
 
@@ -14,7 +10,7 @@ const (
 )
 
 type User struct {
-	ID           uuid.UUID `db:"id"`
+	ID           int64     `db:"id"`
 	Email        string    `db:"email"`
 	PasswordHash string    `db:"password_hash"`
 	FirstName    string    `db:"first_name"`
@@ -42,7 +38,7 @@ type LoginRequest struct {
 // ── Response DTOs ─────────────────────────────────────────────────────────────
 
 type UserResponse struct {
-	ID        uuid.UUID `json:"id"`
+	ID        int64     `json:"id"`
 	Email     string    `json:"email"`
 	FirstName string    `json:"first_name"`
 	LastName  string    `json:"last_name"`

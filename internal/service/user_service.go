@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
@@ -15,9 +14,9 @@ import (
 type UserService interface {
 	Register(ctx context.Context, req *domain.RegisterRequest) (*domain.UserResponse, error)
 	Login(ctx context.Context, req *domain.LoginRequest) (*domain.User, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*domain.UserResponse, error)
-	Update(ctx context.Context, id uuid.UUID, firstName, lastName string) (*domain.UserResponse, error)
-	Delete(ctx context.Context, id uuid.UUID) error
+	GetByID(ctx context.Context, id int64) (*domain.UserResponse, error)
+	Update(ctx context.Context, id int64, firstName, lastName string) (*domain.UserResponse, error)
+	Delete(ctx context.Context, id int64) error
 	List(ctx context.Context, page, limit int) ([]*domain.UserResponse, int, error)
 }
 
@@ -37,7 +36,6 @@ func (s *userService) Register(ctx context.Context, req *domain.RegisterRequest)
 
 	now := time.Now().UTC()
 	user := &domain.User{
-		ID:           uuid.New(),
 		Email:        req.Email,
 		PasswordHash: string(hash),
 		FirstName:    req.FirstName,
@@ -67,7 +65,7 @@ func (s *userService) Login(ctx context.Context, req *domain.LoginRequest) (*dom
 	return user, nil
 }
 
-func (s *userService) GetByID(ctx context.Context, id uuid.UUID) (*domain.UserResponse, error) {
+func (s *userService) GetByID(ctx context.Context, id int64) (*domain.UserResponse, error) {
 	user, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -75,7 +73,7 @@ func (s *userService) GetByID(ctx context.Context, id uuid.UUID) (*domain.UserRe
 	return user.ToResponse(), nil
 }
 
-func (s *userService) Update(ctx context.Context, id uuid.UUID, firstName, lastName string) (*domain.UserResponse, error) {
+func (s *userService) Update(ctx context.Context, id int64, firstName, lastName string) (*domain.UserResponse, error) {
 	user, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -89,7 +87,7 @@ func (s *userService) Update(ctx context.Context, id uuid.UUID, firstName, lastN
 	return user.ToResponse(), nil
 }
 
-func (s *userService) Delete(ctx context.Context, id uuid.UUID) error {
+func (s *userService) Delete(ctx context.Context, id int64) error {
 	return s.repo.Delete(ctx, id)
 }
 

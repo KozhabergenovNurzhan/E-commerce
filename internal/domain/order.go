@@ -1,10 +1,6 @@
 package domain
 
-import (
-	"time"
-
-	"github.com/google/uuid"
-)
+import "time"
 
 type OrderStatus string
 
@@ -17,8 +13,8 @@ const (
 )
 
 type Order struct {
-	ID         uuid.UUID   `db:"id"`
-	UserID     uuid.UUID   `db:"user_id"`
+	ID         int64       `db:"id"`
+	UserID     int64       `db:"user_id"`
 	Status     OrderStatus `db:"status"`
 	TotalPrice float64     `db:"total_price"`
 	CreatedAt  time.Time   `db:"created_at"`
@@ -27,11 +23,11 @@ type Order struct {
 }
 
 type OrderItem struct {
-	ID        uuid.UUID `db:"id"`
-	OrderID   uuid.UUID `db:"order_id"`
-	ProductID uuid.UUID `db:"product_id"`
-	Quantity  int       `db:"quantity"`
-	UnitPrice float64   `db:"unit_price"`
+	ID        int64   `db:"id"`
+	OrderID   int64   `db:"order_id"`
+	ProductID int64   `db:"product_id"`
+	Quantity  int     `db:"quantity"`
+	UnitPrice float64 `db:"unit_price"`
 }
 
 // ── Request DTOs ──────────────────────────────────────────────────────────────
@@ -41,6 +37,6 @@ type CreateOrderRequest struct {
 }
 
 type CreateOrderItemRequest struct {
-	ProductID uuid.UUID `json:"product_id" binding:"required"`
-	Quantity  int       `json:"quantity"   binding:"required,min=1"`
+	ProductID int64 `json:"product_id" binding:"required"`
+	Quantity  int   `json:"quantity"   binding:"required,min=1"`
 }

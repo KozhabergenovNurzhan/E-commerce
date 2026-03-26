@@ -1,10 +1,10 @@
 package auth
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
@@ -22,14 +22,14 @@ func NewJWTManager(secret string, accessTTL time.Duration) *JWTManager {
 	}
 }
 
-func (m *JWTManager) GenerateAccessToken(userID uuid.UUID, role domain.Role) (string, error) {
+func (m *JWTManager) GenerateAccessToken(userID int64, role domain.Role) (string, error) {
 	claims := &Claims{
 		UserID: userID,
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.accessTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			ID:        uuid.New().String(),
+			ID:        fmt.Sprintf("%d-%d", userID, time.Now().UnixNano()),
 		},
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secret)

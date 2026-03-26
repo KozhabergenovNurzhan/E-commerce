@@ -27,10 +27,16 @@ func NewTokenRepository(db *sqlx.DB) TokenRepository {
 
 func (r *tokenRepository) Save(ctx context.Context, t *domain.RefreshToken) error {
 	const q = `
-		INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, revoked, created_at)
-		VALUES (:id, :user_id, :token_hash, :expires_at, :revoked, :created_at)`
-	if _, err := r.db.NamedExecContext(ctx, q, t); err != nil {
+		INSERT INTO refresh_tokens (user_id, token_hash, expires_at, revoked, created_at)
+		VALUES (:user_id, :token_hash, :expires_at, :revoked, :created_at)
+		RETURNING id`
+	rows, err := r.db.NamedQueryContext(ctx, q, t)
+	if err != nil {
 		return apperrors.ErrInternal
+	}
+	defer rows.Close()
+	if rows.Next() {
+		rows.Scan(&t.ID)
 	}
 	return nil
 }

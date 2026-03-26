@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
@@ -14,9 +13,9 @@ import (
 
 type OrderRepository interface {
 	Create(ctx context.Context, order *domain.Order) error
-	FindByID(ctx context.Context, id uuid.UUID) (*domain.Order, error)
-	ListByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.Order, int, error)
-	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.OrderStatus) error
+	FindByID(ctx context.Context, id int64) (*domain.Order, error)
+	ListByUser(ctx context.Context, userID int64, limit, offset int) ([]*domain.Order, int, error)
+	UpdateStatus(ctx context.Context, id int64, status domain.OrderStatus) error
 }
 
 type orderRepository struct {
@@ -35,25 +34,38 @@ func (r *orderRepository) Create(ctx context.Context, order *domain.Order) error
 	defer tx.Rollback()
 
 	const qOrder = `
-		INSERT INTO orders (id, user_id, status, total_price, created_at, updated_at)
-		VALUES (:id, :user_id, :status, :total_price, :created_at, :updated_at)`
-	if _, err := tx.NamedExecContext(ctx, qOrder, order); err != nil {
+		INSERT INTO orders (user_id, status, total_price, created_at, updated_at)
+		VALUES (:user_id, :status, :total_price, :created_at, :updated_at)
+		RETURNING id`
+	rows, err := tx.NamedQuery(qOrder, order)
+	if err != nil {
 		return apperrors.ErrInternal
 	}
+	if rows.Next() {
+		rows.Scan(&order.ID)
+	}
+	rows.Close()
 
 	const qItem = `
-		INSERT INTO order_items (id, order_id, product_id, quantity, unit_price)
-		VALUES (:id, :order_id, :product_id, :quantity, :unit_price)`
-	for _, item := range order.Items {
-		if _, err := tx.NamedExecContext(ctx, qItem, item); err != nil {
+		INSERT INTO order_items (order_id, product_id, quantity, unit_price)
+		VALUES (:order_id, :product_id, :quantity, :unit_price)
+		RETURNING id`
+	for i := range order.Items {
+		order.Items[i].OrderID = order.ID
+		rows, err := tx.NamedQuery(qItem, order.Items[i])
+		if err != nil {
 			return apperrors.ErrInternal
 		}
+		if rows.Next() {
+			rows.Scan(&order.Items[i].ID)
+		}
+		rows.Close()
 	}
 
 	return tx.Commit()
 }
 
-func (r *orderRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.Order, error) {
+func (r *orderRepository) FindByID(ctx context.Context, id int64) (*domain.Order, error) {
 	var order domain.Order
 	const q = `SELECT * FROM orders WHERE id = $1`
 	if err := r.db.GetContext(ctx, &order, q, id); err != nil {
@@ -70,7 +82,7 @@ func (r *orderRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.O
 	return &order, nil
 }
 
-func (r *orderRepository) ListByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.Order, int, error) {
+func (r *orderRepository) ListByUser(ctx context.Context, userID int64, limit, offset int) ([]*domain.Order, int, error) {
 	var orders []*domain.Order
 	const q = `SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
 	if err := r.db.SelectContext(ctx, &orders, q, userID, limit, offset); err != nil {
@@ -81,7 +93,7 @@ func (r *orderRepository) ListByUser(ctx context.Context, userID uuid.UUID, limi
 	return orders, total, nil
 }
 
-func (r *orderRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status domain.OrderStatus) error {
+func (r *orderRepository) UpdateStatus(ctx context.Context, id int64, status domain.OrderStatus) error {
 	const q = `UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2`
 	result, err := r.db.ExecContext(ctx, q, status, id)
 	if err != nil {

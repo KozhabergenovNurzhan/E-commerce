@@ -6,7 +6,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
@@ -15,10 +14,10 @@ import (
 
 type UserRepository interface {
 	Create(ctx context.Context, user *domain.User) error
-	FindByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
+	FindByID(ctx context.Context, id int64) (*domain.User, error)
 	FindByEmail(ctx context.Context, email string) (*domain.User, error)
 	Update(ctx context.Context, user *domain.User) error
-	Delete(ctx context.Context, id uuid.UUID) error
+	Delete(ctx context.Context, id int64) error
 	List(ctx context.Context, limit, offset int) ([]*domain.User, int, error)
 }
 
@@ -32,19 +31,25 @@ func NewUserRepository(db *sqlx.DB) UserRepository {
 
 func (r *userRepository) Create(ctx context.Context, user *domain.User) error {
 	const q = `
-		INSERT INTO users (id, email, password_hash, first_name, last_name, role, is_active, created_at, updated_at)
-		VALUES (:id, :email, :password_hash, :first_name, :last_name, :role, :is_active, :created_at, :updated_at)`
+		INSERT INTO users (email, password_hash, first_name, last_name, role, is_active, created_at, updated_at)
+		VALUES (:email, :password_hash, :first_name, :last_name, :role, :is_active, :created_at, :updated_at)
+		RETURNING id`
 
-	if _, err := r.db.NamedExecContext(ctx, q, user); err != nil {
+	rows, err := r.db.NamedQueryContext(ctx, q, user)
+	if err != nil {
 		if strings.Contains(err.Error(), "23505") {
 			return apperrors.ErrConflict
 		}
 		return apperrors.ErrInternal
 	}
+	defer rows.Close()
+	if rows.Next() {
+		rows.Scan(&user.ID)
+	}
 	return nil
 }
 
-func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+func (r *userRepository) FindByID(ctx context.Context, id int64) (*domain.User, error) {
 	var u domain.User
 	const q = `SELECT * FROM users WHERE id = $1 AND is_active = true`
 	if err := r.db.GetContext(ctx, &u, q, id); err != nil {
@@ -84,7 +89,7 @@ func (r *userRepository) Update(ctx context.Context, user *domain.User) error {
 	return nil
 }
 
-func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
+func (r *userRepository) Delete(ctx context.Context, id int64) error {
 	const q = `UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1 AND is_active = true`
 	result, err := r.db.ExecContext(ctx, q, id)
 	if err != nil {

@@ -1,13 +1,13 @@
 CREATE TABLE IF NOT EXISTS categories (
-    id         UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id         BIGSERIAL    PRIMARY KEY,
     name       VARCHAR(100) NOT NULL,
     slug       VARCHAR(100) NOT NULL UNIQUE,
     created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS products (
-    id          UUID           PRIMARY KEY DEFAULT uuid_generate_v4(),
-    category_id UUID           NOT NULL REFERENCES categories(id),
+    id          BIGSERIAL      PRIMARY KEY,
+    category_id BIGINT         NOT NULL REFERENCES categories(id),
     name        VARCHAR(255)   NOT NULL,
     description TEXT           NOT NULL DEFAULT '',
     price       NUMERIC(10, 2) NOT NULL CHECK (price > 0),

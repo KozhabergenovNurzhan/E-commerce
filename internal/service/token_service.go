@@ -7,8 +7,6 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/auth"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
@@ -16,7 +14,7 @@ import (
 )
 
 type TokenService interface {
-	GenerateTokenPair(ctx context.Context, userID uuid.UUID, role domain.Role) (*domain.AuthTokens, error)
+	GenerateTokenPair(ctx context.Context, userID int64, role domain.Role) (*domain.AuthTokens, error)
 	Refresh(ctx context.Context, refreshToken string) (*domain.AuthTokens, error)
 	Revoke(ctx context.Context, refreshToken string) error
 }
@@ -42,7 +40,7 @@ func NewTokenService(
 	}
 }
 
-func (s *tokenService) GenerateTokenPair(ctx context.Context, userID uuid.UUID, role domain.Role) (*domain.AuthTokens, error) {
+func (s *tokenService) GenerateTokenPair(ctx context.Context, userID int64, role domain.Role) (*domain.AuthTokens, error) {
 	accessToken, err := s.authMgr.GenerateAccessToken(userID, role)
 	if err != nil {
 		return nil, apperrors.ErrInternal
@@ -60,7 +58,7 @@ func (s *tokenService) GenerateTokenPair(ctx context.Context, userID uuid.UUID, 
 	}, nil
 }
 
-func (s *tokenService) generateRefreshToken(ctx context.Context, userID uuid.UUID) (string, error) {
+func (s *tokenService) generateRefreshToken(ctx context.Context, userID int64) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", apperrors.ErrInternal
@@ -68,7 +66,6 @@ func (s *tokenService) generateRefreshToken(ctx context.Context, userID uuid.UUI
 	raw := hex.EncodeToString(b)
 
 	rt := &domain.RefreshToken{
-		ID:        uuid.New(),
 		UserID:    userID,
 		TokenHash: hashToken(raw),
 		ExpiresAt: time.Now().Add(s.refreshTTL),

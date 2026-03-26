@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
@@ -15,9 +14,9 @@ import (
 
 type ProductRepository interface {
 	Create(ctx context.Context, p *domain.Product) error
-	FindByID(ctx context.Context, id uuid.UUID) (*domain.Product, error)
+	FindByID(ctx context.Context, id int64) (*domain.Product, error)
 	Update(ctx context.Context, p *domain.Product) error
-	Delete(ctx context.Context, id uuid.UUID) error
+	Delete(ctx context.Context, id int64) error
 	List(ctx context.Context, f *domain.ProductFilter) ([]*domain.Product, int, error)
 	ListCategories(ctx context.Context) ([]*domain.Category, error)
 }
@@ -32,15 +31,21 @@ func NewProductRepository(db *sqlx.DB) ProductRepository {
 
 func (r *productRepository) Create(ctx context.Context, p *domain.Product) error {
 	const q = `
-		INSERT INTO products (id, category_id, name, description, price, stock, image_url, is_active, created_at, updated_at)
-		VALUES (:id, :category_id, :name, :description, :price, :stock, :image_url, :is_active, :created_at, :updated_at)`
-	if _, err := r.db.NamedExecContext(ctx, q, p); err != nil {
+		INSERT INTO products (category_id, name, description, price, stock, image_url, is_active, created_at, updated_at)
+		VALUES (:category_id, :name, :description, :price, :stock, :image_url, :is_active, :created_at, :updated_at)
+		RETURNING id`
+	rows, err := r.db.NamedQueryContext(ctx, q, p)
+	if err != nil {
 		return apperrors.ErrInternal
+	}
+	defer rows.Close()
+	if rows.Next() {
+		rows.Scan(&p.ID)
 	}
 	return nil
 }
 
-func (r *productRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.Product, error) {
+func (r *productRepository) FindByID(ctx context.Context, id int64) (*domain.Product, error) {
 	var p domain.Product
 	const q = `SELECT * FROM products WHERE id = $1 AND is_active = true`
 	if err := r.db.GetContext(ctx, &p, q, id); err != nil {
@@ -68,7 +73,7 @@ func (r *productRepository) Update(ctx context.Context, p *domain.Product) error
 	return nil
 }
 
-func (r *productRepository) Delete(ctx context.Context, id uuid.UUID) error {
+func (r *productRepository) Delete(ctx context.Context, id int64) error {
 	const q = `UPDATE products SET is_active = false, updated_at = NOW() WHERE id = $1 AND is_active = true`
 	result, err := r.db.ExecContext(ctx, q, id)
 	if err != nil {

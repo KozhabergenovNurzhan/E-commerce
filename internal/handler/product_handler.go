@@ -2,9 +2,9 @@ package handler
 
 import (
 	"log/slog"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/pkg/response"
@@ -28,7 +28,7 @@ func (h *Handler) ListProducts(c *gin.Context) {
 
 // GET /api/v1/products/:id
 func (h *Handler) GetProductByID(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "invalid product id")
 		return
@@ -61,7 +61,7 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 
 // PUT /api/v1/products/:id
 func (h *Handler) UpdateProduct(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "invalid product id")
 		return
@@ -83,7 +83,7 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 
 // DELETE /api/v1/products/:id
 func (h *Handler) DeleteProduct(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "invalid product id")
 		return

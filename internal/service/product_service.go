@@ -4,17 +4,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
 )
 
 type ProductService interface {
 	Create(ctx context.Context, req *domain.CreateProductRequest) (*domain.Product, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*domain.Product, error)
-	Update(ctx context.Context, id uuid.UUID, req *domain.UpdateProductRequest) (*domain.Product, error)
-	Delete(ctx context.Context, id uuid.UUID) error
+	GetByID(ctx context.Context, id int64) (*domain.Product, error)
+	Update(ctx context.Context, id int64, req *domain.UpdateProductRequest) (*domain.Product, error)
+	Delete(ctx context.Context, id int64) error
 	List(ctx context.Context, f *domain.ProductFilter) ([]*domain.Product, int, error)
 	ListCategories(ctx context.Context) ([]*domain.Category, error)
 }
@@ -30,7 +28,6 @@ func NewProductService(repo repository.ProductRepository) ProductService {
 func (s *productService) Create(ctx context.Context, req *domain.CreateProductRequest) (*domain.Product, error) {
 	now := time.Now().UTC()
 	p := &domain.Product{
-		ID:          uuid.New(),
 		CategoryID:  req.CategoryID,
 		Name:        req.Name,
 		Description: req.Description,
@@ -47,11 +44,11 @@ func (s *productService) Create(ctx context.Context, req *domain.CreateProductRe
 	return p, nil
 }
 
-func (s *productService) GetByID(ctx context.Context, id uuid.UUID) (*domain.Product, error) {
+func (s *productService) GetByID(ctx context.Context, id int64) (*domain.Product, error) {
 	return s.repo.FindByID(ctx, id)
 }
 
-func (s *productService) Update(ctx context.Context, id uuid.UUID, req *domain.UpdateProductRequest) (*domain.Product, error) {
+func (s *productService) Update(ctx context.Context, id int64, req *domain.UpdateProductRequest) (*domain.Product, error) {
 	p, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -68,7 +65,7 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, req *domain.U
 	return p, nil
 }
 
-func (s *productService) Delete(ctx context.Context, id uuid.UUID) error {
+func (s *productService) Delete(ctx context.Context, id int64) error {
 	return s.repo.Delete(ctx, id)
 }
 

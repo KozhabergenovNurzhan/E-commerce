@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/auth"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
@@ -64,8 +63,8 @@ func RequireRole(roles ...domain.Role) gin.HandlerFunc {
 	}
 }
 
-// MustUserID extracts the authenticated user's UUID from context.
+// MustUserID extracts the authenticated user's ID from context.
 // Panics if called outside an Auth-protected route (programming error).
-func MustUserID(c *gin.Context) uuid.UUID {
-	return c.MustGet(CtxUserID).(uuid.UUID)
+func MustUserID(c *gin.Context) int64 {
+	return c.MustGet(CtxUserID).(int64)
 }

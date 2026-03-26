@@ -4,18 +4,16 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
 	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
 )
 
 type OrderService interface {
-	Create(ctx context.Context, userID uuid.UUID, req *domain.CreateOrderRequest) (*domain.Order, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*domain.Order, error)
-	ListByUser(ctx context.Context, userID uuid.UUID, page, limit int) ([]*domain.Order, int, error)
-	Cancel(ctx context.Context, id uuid.UUID) error
+	Create(ctx context.Context, userID int64, req *domain.CreateOrderRequest) (*domain.Order, error)
+	GetByID(ctx context.Context, id int64) (*domain.Order, error)
+	ListByUser(ctx context.Context, userID int64, page, limit int) ([]*domain.Order, int, error)
+	Cancel(ctx context.Context, id int64) error
 }
 
 type orderService struct {
@@ -27,7 +25,7 @@ func NewOrderService(orderRepo repository.OrderRepository, productRepo repositor
 	return &orderService{orderRepo: orderRepo, productRepo: productRepo}
 }
 
-func (s *orderService) Create(ctx context.Context, userID uuid.UUID, req *domain.CreateOrderRequest) (*domain.Order, error) {
+func (s *orderService) Create(ctx context.Context, userID int64, req *domain.CreateOrderRequest) (*domain.Order, error) {
 	var total float64
 	items := make([]domain.OrderItem, 0, len(req.Items))
 
@@ -41,7 +39,6 @@ func (s *orderService) Create(ctx context.Context, userID uuid.UUID, req *domain
 		}
 		total += product.Price * float64(r.Quantity)
 		items = append(items, domain.OrderItem{
-			ID:        uuid.New(),
 			ProductID: r.ProductID,
 			Quantity:  r.Quantity,
 			UnitPrice: product.Price,
@@ -50,17 +47,13 @@ func (s *orderService) Create(ctx context.Context, userID uuid.UUID, req *domain
 
 	now := time.Now().UTC()
 	order := &domain.Order{
-		ID:         uuid.New(),
 		UserID:     userID,
 		Status:     domain.OrderStatusPending,
 		TotalPrice: total,
 		CreatedAt:  now,
 		UpdatedAt:  now,
+		Items:      items,
 	}
-	for i := range items {
-		items[i].OrderID = order.ID
-	}
-	order.Items = items
 
 	if err := s.orderRepo.Create(ctx, order); err != nil {
 		return nil, err
@@ -68,11 +61,11 @@ func (s *orderService) Create(ctx context.Context, userID uuid.UUID, req *domain
 	return order, nil
 }
 
-func (s *orderService) GetByID(ctx context.Context, id uuid.UUID) (*domain.Order, error) {
+func (s *orderService) GetByID(ctx context.Context, id int64) (*domain.Order, error) {
 	return s.orderRepo.FindByID(ctx, id)
 }
 
-func (s *orderService) ListByUser(ctx context.Context, userID uuid.UUID, page, limit int) ([]*domain.Order, int, error) {
+func (s *orderService) ListByUser(ctx context.Context, userID int64, page, limit int) ([]*domain.Order, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -82,7 +75,7 @@ func (s *orderService) ListByUser(ctx context.Context, userID uuid.UUID, page, l
 	return s.orderRepo.ListByUser(ctx, userID, limit, (page-1)*limit)
 }
 
-func (s *orderService) Cancel(ctx context.Context, id uuid.UUID) error {
+func (s *orderService) Cancel(ctx context.Context, id int64) error {
 	order, err := s.orderRepo.FindByID(ctx, id)
 	if err != nil {
 		return err
