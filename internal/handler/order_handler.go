@@ -75,6 +75,27 @@ func (h *Handler) GetOrderByID(c *gin.Context) {
 	response.OK(c, order)
 }
 
+// PATCH /api/v1/orders/:id/status
+func (h *Handler) UpdateOrderStatus(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "invalid order id")
+		return
+	}
+
+	var req domain.UpdateOrderStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	if err := h.services.Order.UpdateStatus(c.Request.Context(), id, req.Status); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.NoContent(c)
+}
+
 // PATCH /api/v1/orders/:id/cancel
 func (h *Handler) CancelOrder(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)

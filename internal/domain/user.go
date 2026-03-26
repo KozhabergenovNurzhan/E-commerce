@@ -6,6 +6,8 @@ type Role string
 
 const (
 	RoleCustomer Role = "customer"
+	RoleManager  Role = "manager"
+	RoleSeller   Role = "seller"
 	RoleAdmin    Role = "admin"
 )
 

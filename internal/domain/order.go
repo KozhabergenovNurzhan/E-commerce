@@ -40,3 +40,7 @@ type CreateOrderItemRequest struct {
 	ProductID int64 `json:"product_id" binding:"required"`
 	Quantity  int   `json:"quantity"   binding:"required,min=1"`
 }
+
+type UpdateOrderStatusRequest struct {
+	Status OrderStatus `json:"status" binding:"required,oneof=confirmed shipping delivered"`
+}

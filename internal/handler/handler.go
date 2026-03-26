@@ -68,13 +68,14 @@ func (h *Handler) InitRoutes() *gin.Engine {
 			products.DELETE("/:id", middleware.RequireRole(domain.RoleAdmin), h.DeleteProduct)
 		}
 
-		// Orders — any authenticated user
+		// Orders
 		orders := protected.Group("/orders")
 		{
-			orders.POST("",             h.CreateOrder)
-			orders.GET("",              h.ListOrders)
-			orders.GET("/:id",          h.GetOrderByID)
-			orders.PATCH("/:id/cancel", h.CancelOrder)
+			orders.POST("",              h.CreateOrder)
+			orders.GET("",               h.ListOrders)
+			orders.GET("/:id",           h.GetOrderByID)
+			orders.PATCH("/:id/cancel",  h.CancelOrder)
+			orders.PATCH("/:id/status",  middleware.RequireRole(domain.RoleAdmin, domain.RoleManager), h.UpdateOrderStatus)
 		}
 	}
 

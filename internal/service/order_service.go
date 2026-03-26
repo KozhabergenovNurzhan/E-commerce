@@ -14,6 +14,7 @@ type OrderService interface {
 	GetByID(ctx context.Context, id int64) (*domain.Order, error)
 	ListByUser(ctx context.Context, userID int64, page, limit int) ([]*domain.Order, int, error)
 	Cancel(ctx context.Context, id int64) error
+	UpdateStatus(ctx context.Context, id int64, status domain.OrderStatus) error
 }
 
 type orderService struct {
@@ -73,6 +74,13 @@ func (s *orderService) ListByUser(ctx context.Context, userID int64, page, limit
 		limit = 20
 	}
 	return s.orderRepo.ListByUser(ctx, userID, limit, (page-1)*limit)
+}
+
+func (s *orderService) UpdateStatus(ctx context.Context, id int64, status domain.OrderStatus) error {
+	if _, err := s.orderRepo.FindByID(ctx, id); err != nil {
+		return err
+	}
+	return s.orderRepo.UpdateStatus(ctx, id, status)
 }
 
 func (s *orderService) Cancel(ctx context.Context, id int64) error {
