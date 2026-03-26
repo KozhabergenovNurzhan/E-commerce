@@ -5,6 +5,7 @@ type Services struct {
 	Product ProductService
 	Order   OrderService
 	Token   TokenService
+	Cart    CartService
 }
 
 func NewServices(
@@ -12,11 +13,13 @@ func NewServices(
 	product ProductService,
 	order OrderService,
 	token TokenService,
+	cart CartService,
 ) *Services {
 	return &Services{
 		User:    user,
 		Product: product,
 		Order:   order,
 		Token:   token,
+		Cart:    cart,
 	}
 }

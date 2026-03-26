@@ -60,13 +60,26 @@ func (h *Handler) InitRoutes() *gin.Engine {
 			users.DELETE("/:id", middleware.RequireRole(domain.RoleAdmin), h.DeleteUser)
 		}
 
-		// Products — write operations restricted to admin
+		// Products — write operations for admin and seller
 		products := protected.Group("/products")
 		{
-			products.POST("",       middleware.RequireRole(domain.RoleAdmin), h.CreateProduct)
-			products.PUT("/:id",    middleware.RequireRole(domain.RoleAdmin), h.UpdateProduct)
-			products.DELETE("/:id", middleware.RequireRole(domain.RoleAdmin), h.DeleteProduct)
+			products.POST("",       middleware.RequireRole(domain.RoleAdmin, domain.RoleSeller), h.CreateProduct)
+			products.PUT("/:id",    middleware.RequireRole(domain.RoleAdmin, domain.RoleSeller), h.UpdateProduct)
+			products.DELETE("/:id", middleware.RequireRole(domain.RoleAdmin, domain.RoleSeller), h.DeleteProduct)
 		}
+
+		// Cart — authenticated customers
+		cart := protected.Group("/cart")
+		{
+			cart.GET("",                   h.GetCart)
+			cart.POST("/items",            h.AddToCart)
+			cart.PUT("/items/:productId",  h.UpdateCartItem)
+			cart.DELETE("/items/:productId", h.RemoveFromCart)
+			cart.DELETE("",                h.ClearCart)
+		}
+
+		// Seller dashboard
+		protected.GET("/seller/products", middleware.RequireRole(domain.RoleSeller, domain.RoleAdmin), h.ListSellerProducts)
 
 		// Orders
 		orders := protected.Group("/orders")

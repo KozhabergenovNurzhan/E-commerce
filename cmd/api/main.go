@@ -40,12 +40,14 @@ func main() {
 	productRepo := repository.NewProductRepository(db)
 	orderRepo   := repository.NewOrderRepository(db)
 	tokenRepo   := repository.NewTokenRepository(db)
+	cartRepo    := repository.NewCartRepository(db)
 
 	svc := service.NewServices(
 		service.NewUserService(userRepo),
 		service.NewProductService(productRepo),
 		service.NewOrderService(orderRepo, productRepo),
 		service.NewTokenService(tokenRepo, userRepo, authMgr, cfg.JWT.RefreshTTL),
+		service.NewCartService(cartRepo, productRepo),
 	)
 
 	h := handler.NewHandler(svc, authMgr, log)
