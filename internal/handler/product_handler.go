@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/middleware"
 	"github.com/KozhabergenovNurzhan/E-commerce/pkg/response"
 )
 
@@ -50,7 +51,14 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 		return
 	}
 
-	p, err := h.services.Product.Create(c.Request.Context(), &req)
+	var sellerID *int64
+	callerRole := c.MustGet(middleware.CtxUserRole).(domain.Role)
+	if callerRole == domain.RoleSeller {
+		id := middleware.MustUserID(c)
+		sellerID = &id
+	}
+
+	p, err := h.services.Product.Create(c.Request.Context(), sellerID, &req)
 	if err != nil {
 		h.logger.Error("create product failed", slog.String("err", err.Error()))
 		response.Error(c, err)
@@ -65,6 +73,20 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 	if err != nil {
 		response.BadRequest(c, "invalid product id")
 		return
+	}
+
+	callerID := middleware.MustUserID(c)
+	callerRole := c.MustGet(middleware.CtxUserRole).(domain.Role)
+	if callerRole == domain.RoleSeller {
+		p, err := h.services.Product.GetByID(c.Request.Context(), id)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		if p.SellerID == nil || *p.SellerID != callerID {
+			response.Forbidden(c, "cannot update another seller's product")
+			return
+		}
 	}
 
 	var req domain.UpdateProductRequest
@@ -89,6 +111,20 @@ func (h *Handler) DeleteProduct(c *gin.Context) {
 		return
 	}
 
+	callerID := middleware.MustUserID(c)
+	callerRole := c.MustGet(middleware.CtxUserRole).(domain.Role)
+	if callerRole == domain.RoleSeller {
+		p, err := h.services.Product.GetByID(c.Request.Context(), id)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		if p.SellerID == nil || *p.SellerID != callerID {
+			response.Forbidden(c, "cannot delete another seller's product")
+			return
+		}
+	}
+
 	if err := h.services.Product.Delete(c.Request.Context(), id); err != nil {
 		response.Error(c, err)
 		return
@@ -104,4 +140,22 @@ func (h *Handler) ListCategories(c *gin.Context) {
 		return
 	}
 	response.OK(c, cats)
+}
+
+// GET /api/v1/seller/products
+func (h *Handler) ListSellerProducts(c *gin.Context) {
+	sellerID := middleware.MustUserID(c)
+
+	var f domain.ProductFilter
+	if err := c.ShouldBindQuery(&f); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	products, total, err := h.services.Product.ListBySeller(c.Request.Context(), sellerID, &f)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Paginated(c, products, &response.Meta{Page: f.Page, Limit: f.Limit, Total: total})
 }

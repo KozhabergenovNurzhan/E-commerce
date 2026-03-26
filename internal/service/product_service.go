@@ -9,11 +9,12 @@ import (
 )
 
 type ProductService interface {
-	Create(ctx context.Context, req *domain.CreateProductRequest) (*domain.Product, error)
+	Create(ctx context.Context, sellerID *int64, req *domain.CreateProductRequest) (*domain.Product, error)
 	GetByID(ctx context.Context, id int64) (*domain.Product, error)
 	Update(ctx context.Context, id int64, req *domain.UpdateProductRequest) (*domain.Product, error)
 	Delete(ctx context.Context, id int64) error
 	List(ctx context.Context, f *domain.ProductFilter) ([]*domain.Product, int, error)
+	ListBySeller(ctx context.Context, sellerID int64, f *domain.ProductFilter) ([]*domain.Product, int, error)
 	ListCategories(ctx context.Context) ([]*domain.Category, error)
 }
 
@@ -25,10 +26,11 @@ func NewProductService(repo repository.ProductRepository) ProductService {
 	return &productService{repo: repo}
 }
 
-func (s *productService) Create(ctx context.Context, req *domain.CreateProductRequest) (*domain.Product, error) {
+func (s *productService) Create(ctx context.Context, sellerID *int64, req *domain.CreateProductRequest) (*domain.Product, error) {
 	now := utils.Now()
 	p := &domain.Product{
 		CategoryID:  req.CategoryID,
+		SellerID:    sellerID,
 		Name:        req.Name,
 		Description: req.Description,
 		Price:       req.Price,
@@ -80,6 +82,19 @@ func (s *productService) List(ctx context.Context, f *domain.ProductFilter) ([]*
 		f.Limit = 100
 	}
 	return s.repo.List(ctx, f)
+}
+
+func (s *productService) ListBySeller(ctx context.Context, sellerID int64, f *domain.ProductFilter) ([]*domain.Product, int, error) {
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.Limit < 1 {
+		f.Limit = 20
+	}
+	if f.Limit > 100 {
+		f.Limit = 100
+	}
+	return s.repo.ListBySeller(ctx, sellerID, f)
 }
 
 func (s *productService) ListCategories(ctx context.Context) ([]*domain.Category, error) {

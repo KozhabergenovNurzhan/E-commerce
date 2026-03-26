@@ -18,6 +18,7 @@ type ProductRepository interface {
 	Update(ctx context.Context, p *domain.Product) error
 	Delete(ctx context.Context, id int64) error
 	List(ctx context.Context, f *domain.ProductFilter) ([]*domain.Product, int, error)
+	ListBySeller(ctx context.Context, sellerID int64, f *domain.ProductFilter) ([]*domain.Product, int, error)
 	ListCategories(ctx context.Context) ([]*domain.Category, error)
 }
 
@@ -31,8 +32,8 @@ func NewProductRepository(db *sqlx.DB) ProductRepository {
 
 func (r *productRepository) Create(ctx context.Context, p *domain.Product) error {
 	const q = `
-		INSERT INTO products (category_id, name, description, price, stock, image_url, is_active, created_at, updated_at)
-		VALUES (:category_id, :name, :description, :price, :stock, :image_url, :is_active, :created_at, :updated_at)
+		INSERT INTO products (category_id, seller_id, name, description, price, stock, image_url, is_active, created_at, updated_at)
+		VALUES (:category_id, :seller_id, :name, :description, :price, :stock, :image_url, :is_active, :created_at, :updated_at)
 		RETURNING id`
 	rows, err := r.db.NamedQueryContext(ctx, q, p)
 	if err != nil {
@@ -117,6 +118,35 @@ func (r *productRepository) List(ctx context.Context, f *domain.ProductFilter) (
 		query += clause
 		count += clause
 		args = append(args, *f.MaxPrice)
+		i++
+	}
+
+	var total int
+	if err := r.db.GetContext(ctx, &total, count, args...); err != nil {
+		return nil, 0, apperrors.ErrInternal
+	}
+
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", i, i+1)
+	args = append(args, f.Limit, (f.Page-1)*f.Limit)
+
+	var products []*domain.Product
+	if err := r.db.SelectContext(ctx, &products, query, args...); err != nil {
+		return nil, 0, apperrors.ErrInternal
+	}
+	return products, total, nil
+}
+
+func (r *productRepository) ListBySeller(ctx context.Context, sellerID int64, f *domain.ProductFilter) ([]*domain.Product, int, error) {
+	query := `SELECT * FROM products WHERE is_active = true AND seller_id = $1`
+	count := `SELECT COUNT(*) FROM products WHERE is_active = true AND seller_id = $1`
+	args := []interface{}{sellerID}
+	i := 2
+
+	if f.Search != "" {
+		clause := fmt.Sprintf(" AND name ILIKE $%d", i)
+		query += clause
+		count += clause
+		args = append(args, "%"+f.Search+"%")
 		i++
 	}
 
