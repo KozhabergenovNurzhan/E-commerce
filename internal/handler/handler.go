@@ -3,6 +3,7 @@ package handler
 import (
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,7 +27,9 @@ func NewHandler(services *service.Services, authMgr auth.Manager, logger *slog.L
 }
 
 func (h *Handler) InitRoutes() *gin.Engine {
-	gin.SetMode(gin.ReleaseMode)
+	if os.Getenv("GIN_MODE") == "" {
+		gin.SetMode(gin.DebugMode)
+	}
 
 	r := gin.New()
 	r.Use(gin.Recovery())

@@ -17,6 +17,7 @@ services:
       JWT_ACCESS_TTL: "15m"
       JWT_REFRESH_TTL: "168h"
       LOG_LEVEL: info
+      GIN_MODE: release
     depends_on:
       postgres:
         condition: service_healthy
