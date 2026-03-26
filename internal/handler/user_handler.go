@@ -1,9 +1,12 @@
 package handler
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	"strconv"
 
+	"github.com/gin-gonic/gin"
+
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/middleware"
 	"github.com/KozhabergenovNurzhan/E-commerce/pkg/response"
 )
 
@@ -28,7 +31,7 @@ func (h *Handler) ListUsers(c *gin.Context) {
 
 // GET /api/v1/users/:id
 func (h *Handler) GetUserByID(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "invalid user id")
 		return
@@ -44,9 +47,16 @@ func (h *Handler) GetUserByID(c *gin.Context) {
 
 // PUT /api/v1/users/:id
 func (h *Handler) UpdateUser(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "invalid user id")
+		return
+	}
+
+	callerID := middleware.MustUserID(c)
+	callerRole := c.MustGet(middleware.CtxUserRole).(domain.Role)
+	if callerRole != domain.RoleAdmin && callerID != id {
+		response.Forbidden(c, "cannot update another user's profile")
 		return
 	}
 
@@ -69,7 +79,7 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 
 // DELETE /api/v1/users/:id
 func (h *Handler) DeleteUser(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "invalid user id")
 		return
