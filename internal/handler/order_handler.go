@@ -7,21 +7,11 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/service"
 	"github.com/KozhabergenovNurzhan/E-commerce/pkg/response"
 )
 
-type OrderHandler struct {
-	svc    service.OrderService
-	logger *slog.Logger
-}
-
-func NewOrderHandler(svc service.OrderService, logger *slog.Logger) *OrderHandler {
-	return &OrderHandler{svc: svc, logger: logger}
-}
-
 // POST /api/v1/orders
-func (h *OrderHandler) Create(c *gin.Context) {
+func (h *Handler) CreateOrder(c *gin.Context) {
 	userID := mustUserID(c)
 
 	var req domain.CreateOrderRequest
@@ -30,7 +20,7 @@ func (h *OrderHandler) Create(c *gin.Context) {
 		return
 	}
 
-	order, err := h.svc.Create(c.Request.Context(), userID, &req)
+	order, err := h.services.Order.Create(c.Request.Context(), userID, &req)
 	if err != nil {
 		h.logger.Error("create order failed", slog.String("err", err.Error()))
 		response.Error(c, err)
@@ -39,24 +29,8 @@ func (h *OrderHandler) Create(c *gin.Context) {
 	response.Created(c, order)
 }
 
-// GET /api/v1/orders/:id
-func (h *OrderHandler) GetByID(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		response.BadRequest(c, "invalid order id")
-		return
-	}
-
-	order, err := h.svc.GetByID(c.Request.Context(), id)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.OK(c, order)
-}
-
 // GET /api/v1/orders
-func (h *OrderHandler) List(c *gin.Context) {
+func (h *Handler) ListOrders(c *gin.Context) {
 	userID := mustUserID(c)
 
 	var q struct {
@@ -68,27 +42,39 @@ func (h *OrderHandler) List(c *gin.Context) {
 		return
 	}
 
-	orders, total, err := h.svc.ListByUser(c.Request.Context(), userID, q.Page, q.Limit)
+	orders, total, err := h.services.Order.ListByUser(c.Request.Context(), userID, q.Page, q.Limit)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	response.Paginated(c, orders, &response.Meta{
-		Page:  q.Page,
-		Limit: q.Limit,
-		Total: total,
-	})
+	response.Paginated(c, orders, &response.Meta{Page: q.Page, Limit: q.Limit, Total: total})
 }
 
-// PATCH /api/v1/orders/:id/cancel
-func (h *OrderHandler) Cancel(c *gin.Context) {
+// GET /api/v1/orders/:id
+func (h *Handler) GetOrderByID(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.BadRequest(c, "invalid order id")
 		return
 	}
 
-	if err := h.svc.Cancel(c.Request.Context(), id); err != nil {
+	order, err := h.services.Order.GetByID(c.Request.Context(), id)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, order)
+}
+
+// PATCH /api/v1/orders/:id/cancel
+func (h *Handler) CancelOrder(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid order id")
+		return
+	}
+
+	if err := h.services.Order.Cancel(c.Request.Context(), id); err != nil {
 		response.Error(c, err)
 		return
 	}

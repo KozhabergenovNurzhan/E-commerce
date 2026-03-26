@@ -50,23 +50,20 @@ func main() {
 	}
 	log.Info("migrations applied")
 
-	userRepo := repository.NewUserRepository(db)
+	userRepo    := repository.NewUserRepository(db)
 	productRepo := repository.NewProductRepository(db)
-	orderRepo := repository.NewOrderRepository(db)
-	tokenRepo := repository.NewTokenRepository(db)
+	orderRepo   := repository.NewOrderRepository(db)
+	tokenRepo   := repository.NewTokenRepository(db)
 
-	tokenSvc := service.NewTokenService(tokenRepo, userRepo, cfg.JWT.Secret, cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL)
-	userSvc := service.NewUserService(userRepo)
-	productSvc := service.NewProductService(productRepo)
-	orderSvc := service.NewOrderService(orderRepo, productRepo)
+	svc := service.NewServices(
+		service.NewUserService(userRepo),
+		service.NewProductService(productRepo),
+		service.NewOrderService(orderRepo, productRepo),
+		service.NewTokenService(tokenRepo, userRepo, cfg.JWT.Secret, cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL),
+	)
 
-	authHandler := handler.NewAuthHandler(userSvc, tokenSvc, log)
-	userHandler := handler.NewUserHandler(userSvc, log)
-	productHandler := handler.NewProductHandler(productSvc, log)
-	orderHandler := handler.NewOrderHandler(orderSvc, log)
-
-	router := handler.NewRouter(authHandler, userHandler, productHandler, orderHandler, tokenSvc, log)
-	engine := router.Setup()
+	h := handler.NewHandler(svc, log)
+	engine := h.InitRoutes()
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.Port),
