@@ -41,12 +41,12 @@ func (m *MockUserRepo) List(ctx context.Context, limit, offset int) ([]*domain.U
 // ── ProductRepository mock ────────────────────────────────────────────────────
 
 type MockProductRepo struct {
-	CreateFn        func(ctx context.Context, p *domain.Product) error
-	FindByIDFn      func(ctx context.Context, id int64) (*domain.Product, error)
-	UpdateFn        func(ctx context.Context, p *domain.Product) error
-	DeleteFn        func(ctx context.Context, id int64) error
-	ListFn          func(ctx context.Context, f *domain.ProductFilter) ([]*domain.Product, int, error)
-	ListBySellerFn  func(ctx context.Context, sellerID int64, f *domain.ProductFilter) ([]*domain.Product, int, error)
+	CreateFn         func(ctx context.Context, p *domain.Product) error
+	FindByIDFn       func(ctx context.Context, id int64) (*domain.Product, error)
+	UpdateFn         func(ctx context.Context, p *domain.Product) error
+	DeleteFn         func(ctx context.Context, id int64) error
+	ListFn           func(ctx context.Context, f *domain.ProductFilter) ([]*domain.Product, int, error)
+	ListBySellerFn   func(ctx context.Context, sellerID int64, f *domain.ProductFilter) ([]*domain.Product, int, error)
 	ListCategoriesFn func(ctx context.Context) ([]*domain.Category, error)
 }
 
@@ -92,6 +92,28 @@ func (m *MockOrderRepo) ListByUser(ctx context.Context, userID int64, limit, off
 }
 func (m *MockOrderRepo) UpdateStatus(ctx context.Context, id int64, status domain.OrderStatus) error {
 	return m.UpdateStatusFn(ctx, id, status)
+}
+
+// ── CartRepository mock ───────────────────────────────────────────────────────
+
+type MockCartRepo struct {
+	UpsertFn       func(ctx context.Context, item *domain.CartItem) error
+	FindByUserIDFn func(ctx context.Context, userID int64) ([]*domain.CartItem, error)
+	DeleteFn       func(ctx context.Context, userID, productID int64) error
+	ClearFn        func(ctx context.Context, userID int64) error
+}
+
+func (m *MockCartRepo) Upsert(ctx context.Context, item *domain.CartItem) error {
+	return m.UpsertFn(ctx, item)
+}
+func (m *MockCartRepo) FindByUserID(ctx context.Context, userID int64) ([]*domain.CartItem, error) {
+	return m.FindByUserIDFn(ctx, userID)
+}
+func (m *MockCartRepo) Delete(ctx context.Context, userID, productID int64) error {
+	return m.DeleteFn(ctx, userID, productID)
+}
+func (m *MockCartRepo) Clear(ctx context.Context, userID int64) error {
+	return m.ClearFn(ctx, userID)
 }
 
 // ── TokenRepository mock ──────────────────────────────────────────────────────
