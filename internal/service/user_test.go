@@ -16,11 +16,11 @@ import (
 
 func TestRegister(t *testing.T) {
 	tests := []struct {
-		name    string
-		req     *domain.RegisterRequest
+		name     string
+		req      *domain.RegisterRequest
 		createFn func(ctx context.Context, user *domain.User) error
-		wantErr error
-		check   func(t *testing.T, resp *domain.UserResponse)
+		wantErr  error
+		check    func(t *testing.T, resp *domain.UserResponse)
 	}{
 		{
 			name: "success",
