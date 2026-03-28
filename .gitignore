@@ -44,5 +44,7 @@ temp/
 # Generated files (optional)
 *.gen.go
 
+CLAUDE.md
+
 # Claude Code internal files
 .claude/
