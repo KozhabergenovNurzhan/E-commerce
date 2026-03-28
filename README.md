@@ -4,7 +4,7 @@ A production-ready e-commerce backend built with Go, Gin, PostgreSQL, and JWT au
 
 ## Tech Stack
 
-- **Go 1.25.4** — language
+- **Go** — language
 - **Gin** — HTTP framework
 - **PostgreSQL 16** — database
 - **sqlx + pgx** — database driver and query layer
@@ -39,9 +39,6 @@ go run ./cmd/api
 
 ```bash
 go test ./...
-
-# Force re-run (bypass cache)
-go test -count=1 ./...
 ```
 
 ## Configuration
@@ -63,6 +60,7 @@ go test -count=1 ./...
 ## API
 
 ### Auth
+
 | Method | Path | Access | Description |
 |--------|------|--------|-------------|
 | POST | `/api/v1/auth/register` | Public | Register new customer |
@@ -71,77 +69,95 @@ go test -count=1 ./...
 | POST | `/api/v1/auth/logout` | Public | Revoke refresh token |
 
 ### Products
+
 | Method | Path | Access | Description |
 |--------|------|--------|-------------|
 | GET | `/api/v1/products` | Public | List products (filterable) |
 | GET | `/api/v1/products/:id` | Public | Get product by ID |
-| GET | `/api/v1/categories` | Public | List categories |
-| POST | `/api/v1/products` | Admin | Create product |
-| PUT | `/api/v1/products/:id` | Admin | Update product |
-| DELETE | `/api/v1/products/:id` | Admin | Soft-delete product |
+| POST | `/api/v1/products` | Admin, Seller | Create product |
+| PUT | `/api/v1/products/:id` | Admin, Seller | Update product |
+| DELETE | `/api/v1/products/:id` | Admin, Seller | Soft-delete product |
+
+### Categories
+
+| Method | Path | Access | Description |
+|--------|------|--------|-------------|
+| GET | `/api/v1/categories` | Public | List all categories |
+| POST | `/api/v1/categories` | Admin | Create category |
+| PUT | `/api/v1/categories/:id` | Admin | Update category |
+| DELETE | `/api/v1/categories/:id` | Admin | Delete category |
+
+### Cart
+
+| Method | Path | Access | Description |
+|--------|------|--------|-------------|
+| GET | `/api/v1/cart` | Auth | Get cart with totals |
+| POST | `/api/v1/cart/items` | Auth | Add item to cart |
+| PUT | `/api/v1/cart/items/:productId` | Auth | Update item quantity |
+| DELETE | `/api/v1/cart/items/:productId` | Auth | Remove item from cart |
+| DELETE | `/api/v1/cart` | Auth | Clear cart |
+| POST | `/api/v1/cart/checkout` | Auth | Convert cart to order |
+
+### Orders
+
+| Method | Path | Access | Description |
+|--------|------|--------|-------------|
+| POST | `/api/v1/orders` | Auth | Create order directly |
+| GET | `/api/v1/orders` | Auth | List own orders (paginated, with items) |
+| GET | `/api/v1/orders/:id` | Auth | Get order by ID |
+| PATCH | `/api/v1/orders/:id/cancel` | Auth | Cancel pending order |
+| PATCH | `/api/v1/orders/:id/status` | Admin, Manager | Update order status |
 
 ### Users
+
 | Method | Path | Access | Description |
 |--------|------|--------|-------------|
 | GET | `/api/v1/users` | Admin | List all users |
 | GET | `/api/v1/users/:id` | Auth | Get user by ID |
-| PUT | `/api/v1/users/:id` | Owner / Admin | Update profile |
+| PUT | `/api/v1/users/:id` | Auth | Update profile |
 | DELETE | `/api/v1/users/:id` | Admin | Soft-delete user |
 
-### Orders
-| Method | Path | Access | Description |
-|--------|------|--------|-------------|
-| POST | `/api/v1/orders` | Auth | Create order |
-| GET | `/api/v1/orders` | Auth | List own orders |
-| GET | `/api/v1/orders/:id` | Owner / Admin | Get order by ID |
-| PATCH | `/api/v1/orders/:id/cancel` | Owner | Cancel pending order |
-| PATCH | `/api/v1/orders/:id/status` | Admin / Manager | Update order status |
+### Seller
 
-### Cart
 | Method | Path | Access | Description |
 |--------|------|--------|-------------|
-| POST | `/api/v1/cart` | Auth | Add item to cart |
-| GET | `/api/v1/cart` | Auth | Get cart with totals |
-| PUT | `/api/v1/cart/:product_id` | Auth | Update item quantity |
-| DELETE | `/api/v1/cart/:product_id` | Auth | Remove item from cart |
-| DELETE | `/api/v1/cart` | Auth | Clear cart |
+| GET | `/api/v1/seller/products` | Seller, Admin | List own products |
 
 ## Roles
 
 | Role | Capabilities |
 |------|-------------|
 | `customer` | Own profile, own orders, cart |
-| `manager` | Update order status (confirmed → shipping → delivered) |
+| `manager` | Update order status |
 | `seller` | Create and manage own products |
 | `admin` | Full access |
 
 ## Auth Flow
 
-Requests to protected routes require:
+Protected routes require:
 ```
 Authorization: Bearer <access_token>
 ```
 
-On token expiry, call `POST /api/v1/auth/refresh` with `{"refresh_token": "..."}` to get a new pair. The old refresh token is revoked immediately (rotation).
+On expiry, call `POST /api/v1/auth/refresh` with `{"refresh_token": "..."}` to get a new pair. The old token is revoked immediately (rotation).
 
 ## Project Structure
 
 ```
-cmd/api/          # Entry point
-config/           # Environment config
+cmd/api/             # Entry point — wires all dependencies
 internal/
-  auth/           # JWT manager (stateless signing/validation)
-  domain/         # Entities and DTOs
-  handler/        # Gin HTTP handlers and router
-  middleware/      # Auth and role middleware
-  repository/     # PostgreSQL data access layer
-  server/         # HTTP server with graceful shutdown
-  service/        # Business logic
-  testutil/       # Shared mock repositories for tests
-migrations/       # SQL migration files
-pkg/
-  apperrors/      # Domain error types
-  logger/         # slog setup
-  response/       # JSON response helpers
-  utils/          # Shared utilities (timezone-aware Now())
+  auth/              # JWT manager (sign / validate)
+  config/            # Environment variable loading
+  handler/           # Gin HTTP handlers and router
+  middleware/        # JWT auth and role enforcement
+  models/            # Entities and DTOs
+  pkg/
+    apperrors/       # Domain error types with HTTP status codes
+    logger/          # slog structured logging setup
+    response/        # JSON response helpers
+    utils/           # Shared utilities
+  repository/        # PostgreSQL data access (sqlx)
+  service/           # Business logic
+  testutil/          # Shared mock repositories for unit tests
+migrations/          # golang-migrate SQL files
 ```
