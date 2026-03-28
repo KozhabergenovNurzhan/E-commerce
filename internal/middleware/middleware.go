@@ -3,11 +3,11 @@ package middleware
 import (
 	"strings"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/response"
 	"github.com/gin-gonic/gin"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/auth"
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/response"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 )
 
 const (
@@ -38,7 +38,7 @@ func Auth(mgr auth.Manager) gin.HandlerFunc {
 }
 
 // RequireRole allows only users with one of the given roles to proceed.
-func RequireRole(roles ...domain.Role) gin.HandlerFunc {
+func RequireRole(roles ...models.Role) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		val, exists := c.Get(CtxUserRole)
 		if !exists {
@@ -46,7 +46,7 @@ func RequireRole(roles ...domain.Role) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		userRole, ok := val.(domain.Role)
+		userRole, ok := val.(models.Role)
 		if !ok {
 			response.Unauthorized(c, "unauthorized")
 			c.Abort()

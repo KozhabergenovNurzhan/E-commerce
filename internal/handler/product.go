@@ -4,16 +4,16 @@ import (
 	"log/slog"
 	"strconv"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/response"
 	"github.com/gin-gonic/gin"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/middleware"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/response"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 )
 
 // GET /api/v1/products
 func (h *Handler) ListProducts(c *gin.Context) {
-	var f domain.ProductFilter
+	var f models.ProductFilter
 	if err := c.ShouldBindQuery(&f); err != nil {
 		response.BadRequest(c, err.Error())
 		return
@@ -45,15 +45,15 @@ func (h *Handler) GetProductByID(c *gin.Context) {
 
 // POST /api/v1/products
 func (h *Handler) CreateProduct(c *gin.Context) {
-	var req domain.CreateProductRequest
+	var req models.CreateProduct
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
 
 	var sellerID *int64
-	callerRole := c.MustGet(middleware.CtxUserRole).(domain.Role)
-	if callerRole == domain.RoleSeller {
+	callerRole := c.MustGet(middleware.CtxUserRole).(models.Role)
+	if callerRole == models.RoleSeller {
 		id := middleware.MustUserID(c)
 		sellerID = &id
 	}
@@ -76,8 +76,8 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 	}
 
 	callerID := middleware.MustUserID(c)
-	callerRole := c.MustGet(middleware.CtxUserRole).(domain.Role)
-	if callerRole == domain.RoleSeller {
+	callerRole := c.MustGet(middleware.CtxUserRole).(models.Role)
+	if callerRole == models.RoleSeller {
 		p, err := h.services.Product.GetByID(c.Request.Context(), id)
 		if err != nil {
 			response.Error(c, err)
@@ -89,7 +89,7 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 		}
 	}
 
-	var req domain.UpdateProductRequest
+	var req models.UpdateProduct
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
@@ -112,8 +112,8 @@ func (h *Handler) DeleteProduct(c *gin.Context) {
 	}
 
 	callerID := middleware.MustUserID(c)
-	callerRole := c.MustGet(middleware.CtxUserRole).(domain.Role)
-	if callerRole == domain.RoleSeller {
+	callerRole := c.MustGet(middleware.CtxUserRole).(models.Role)
+	if callerRole == models.RoleSeller {
 		p, err := h.services.Product.GetByID(c.Request.Context(), id)
 		if err != nil {
 			response.Error(c, err)
@@ -146,7 +146,7 @@ func (h *Handler) ListCategories(c *gin.Context) {
 func (h *Handler) ListSellerProducts(c *gin.Context) {
 	sellerID := middleware.MustUserID(c)
 
-	var f domain.ProductFilter
+	var f models.ProductFilter
 	if err := c.ShouldBindQuery(&f); err != nil {
 		response.BadRequest(c, err.Error())
 		return

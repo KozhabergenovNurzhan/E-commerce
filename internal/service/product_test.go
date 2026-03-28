@@ -2,20 +2,21 @@ package service_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/service"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/testutil"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
 )
 
 func TestProductCreate(t *testing.T) {
 	sellerID := int64(42)
-	req := &domain.CreateProductRequest{
+	req := &models.CreateProduct{
 		CategoryID:  1,
 		Name:        "Widget",
 		Description: "A fine widget",
@@ -25,7 +26,7 @@ func TestProductCreate(t *testing.T) {
 	}
 
 	productRepo := &testutil.MockProductRepo{
-		CreateFn: func(_ context.Context, p *domain.Product) error {
+		CreateFn: func(_ context.Context, p *models.Product) error {
 			p.ID = 7
 			return nil
 		},
@@ -46,35 +47,35 @@ func TestProductCreate(t *testing.T) {
 
 func TestProductCreate_RepoError(t *testing.T) {
 	productRepo := &testutil.MockProductRepo{
-		CreateFn: func(_ context.Context, _ *domain.Product) error {
-			return apperrors.ErrInternal
+		CreateFn: func(_ context.Context, _ *models.Product) error {
+			return apperrors.Internal("internal server error", nil)
 		},
 	}
 
 	_, err := service.NewProductService(productRepo).
-		Create(context.Background(), nil, &domain.CreateProductRequest{Name: "x", Price: 1, CategoryID: 1})
+		Create(context.Background(), nil, &models.CreateProduct{Name: "x", Price: 1, CategoryID: 1})
 
-	assert.Equal(t, apperrors.ErrInternal, err)
+	assertCode(t, err, http.StatusInternalServerError)
 }
 
 func TestProductGetByID(t *testing.T) {
 	tests := []struct {
-		name    string
-		stub    func(ctx context.Context, id int64) (*domain.Product, error)
-		wantErr error
+		name     string
+		stub     func(ctx context.Context, id int64) (*models.Product, error)
+		wantCode int
 	}{
 		{
 			name: "found",
-			stub: func(_ context.Context, id int64) (*domain.Product, error) {
-				return &domain.Product{ID: id, Name: "Widget"}, nil
+			stub: func(_ context.Context, id int64) (*models.Product, error) {
+				return &models.Product{ID: id, Name: "Widget"}, nil
 			},
 		},
 		{
 			name: "not found",
-			stub: func(_ context.Context, _ int64) (*domain.Product, error) {
-				return nil, apperrors.ErrNotFound
+			stub: func(_ context.Context, _ int64) (*models.Product, error) {
+				return nil, apperrors.NotFound("product not found", nil)
 			},
-			wantErr: apperrors.ErrNotFound,
+			wantCode: http.StatusNotFound,
 		},
 	}
 
@@ -82,8 +83,8 @@ func TestProductGetByID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			productRepo := &testutil.MockProductRepo{FindByIDFn: tt.stub}
 			p, err := service.NewProductService(productRepo).GetByID(context.Background(), 1)
-			if tt.wantErr != nil {
-				assert.Equal(t, tt.wantErr, err)
+			if tt.wantCode != 0 {
+				assertCode(t, err, tt.wantCode)
 				return
 			}
 			require.NoError(t, err)
@@ -95,35 +96,35 @@ func TestProductGetByID(t *testing.T) {
 func TestProductUpdate(t *testing.T) {
 	tests := []struct {
 		name      string
-		findByID  func(ctx context.Context, id int64) (*domain.Product, error)
-		updateFn  func(ctx context.Context, p *domain.Product) error
-		wantErr   error
+		findByID  func(ctx context.Context, id int64) (*models.Product, error)
+		updateFn  func(ctx context.Context, p *models.Product) error
+		wantCode  int
 		checkName string
 	}{
 		{
 			name: "success — fields are applied",
-			findByID: func(_ context.Context, id int64) (*domain.Product, error) {
-				return &domain.Product{ID: id, Name: "Old"}, nil
+			findByID: func(_ context.Context, id int64) (*models.Product, error) {
+				return &models.Product{ID: id, Name: "Old"}, nil
 			},
-			updateFn:  func(_ context.Context, _ *domain.Product) error { return nil },
+			updateFn:  func(_ context.Context, _ *models.Product) error { return nil },
 			checkName: "New",
 		},
 		{
 			name: "product not found",
-			findByID: func(_ context.Context, _ int64) (*domain.Product, error) {
-				return nil, apperrors.ErrNotFound
+			findByID: func(_ context.Context, _ int64) (*models.Product, error) {
+				return nil, apperrors.NotFound("product not found", nil)
 			},
-			wantErr: apperrors.ErrNotFound,
+			wantCode: http.StatusNotFound,
 		},
 		{
 			name: "repo update error",
-			findByID: func(_ context.Context, id int64) (*domain.Product, error) {
-				return &domain.Product{ID: id}, nil
+			findByID: func(_ context.Context, id int64) (*models.Product, error) {
+				return &models.Product{ID: id}, nil
 			},
-			updateFn: func(_ context.Context, _ *domain.Product) error {
-				return apperrors.ErrInternal
+			updateFn: func(_ context.Context, _ *models.Product) error {
+				return apperrors.Internal("internal server error", nil)
 			},
-			wantErr: apperrors.ErrInternal,
+			wantCode: http.StatusInternalServerError,
 		},
 	}
 
@@ -133,11 +134,11 @@ func TestProductUpdate(t *testing.T) {
 				FindByIDFn: tt.findByID,
 				UpdateFn:   tt.updateFn,
 			}
-			req := &domain.UpdateProductRequest{Name: "New", Price: 1.0}
+			req := &models.UpdateProduct{Name: "New", Price: 1.0}
 			p, err := service.NewProductService(productRepo).Update(context.Background(), 1, req)
 
-			if tt.wantErr != nil {
-				assert.Equal(t, tt.wantErr, err)
+			if tt.wantCode != 0 {
+				assertCode(t, err, tt.wantCode)
 				return
 			}
 			require.NoError(t, err)
@@ -149,19 +150,20 @@ func TestProductUpdate(t *testing.T) {
 
 func TestProductDelete(t *testing.T) {
 	tests := []struct {
-		name    string
-		stub    func(ctx context.Context, id int64) error
-		wantErr error
+		name     string
+		stub     func(ctx context.Context, id int64) error
+		wantCode int
 	}{
 		{
-			name:    "success",
-			stub:    func(_ context.Context, _ int64) error { return nil },
-			wantErr: nil,
+			name: "success",
+			stub: func(_ context.Context, _ int64) error { return nil },
 		},
 		{
-			name:    "not found",
-			stub:    func(_ context.Context, _ int64) error { return apperrors.ErrNotFound },
-			wantErr: apperrors.ErrNotFound,
+			name: "not found",
+			stub: func(_ context.Context, _ int64) error {
+				return apperrors.NotFound("product not found", nil)
+			},
+			wantCode: http.StatusNotFound,
 		},
 	}
 
@@ -169,7 +171,11 @@ func TestProductDelete(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			productRepo := &testutil.MockProductRepo{DeleteFn: tt.stub}
 			err := service.NewProductService(productRepo).Delete(context.Background(), 1)
-			assert.Equal(t, tt.wantErr, err)
+			if tt.wantCode != 0 {
+				assertCode(t, err, tt.wantCode)
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }
@@ -177,23 +183,23 @@ func TestProductDelete(t *testing.T) {
 func TestProductList_PaginationDefaults(t *testing.T) {
 	tests := []struct {
 		name      string
-		input     domain.ProductFilter
+		input     models.ProductFilter
 		wantPage  int
 		wantLimit int
 	}{
-		{name: "zero page and limit use defaults", input: domain.ProductFilter{Page: 0, Limit: 0}, wantPage: 1, wantLimit: 20},
-		{name: "negative page uses default", input: domain.ProductFilter{Page: -1, Limit: 10}, wantPage: 1, wantLimit: 10},
-		{name: "limit over 100 is capped", input: domain.ProductFilter{Page: 1, Limit: 200}, wantPage: 1, wantLimit: 100},
-		{name: "valid values are preserved", input: domain.ProductFilter{Page: 3, Limit: 50}, wantPage: 3, wantLimit: 50},
+		{name: "zero page and limit use defaults", input: models.ProductFilter{Page: 0, Limit: 0}, wantPage: 1, wantLimit: 20},
+		{name: "negative page uses default", input: models.ProductFilter{Page: -1, Limit: 10}, wantPage: 1, wantLimit: 10},
+		{name: "limit over 100 is capped", input: models.ProductFilter{Page: 1, Limit: 200}, wantPage: 1, wantLimit: 100},
+		{name: "valid values are preserved", input: models.ProductFilter{Page: 3, Limit: 50}, wantPage: 3, wantLimit: 50},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var capturedFilter *domain.ProductFilter
+			var capturedFilter *models.ProductFilter
 			productRepo := &testutil.MockProductRepo{
-				ListFn: func(_ context.Context, f *domain.ProductFilter) ([]*domain.Product, int, error) {
+				ListFn: func(_ context.Context, f *models.ProductFilter) ([]*models.Product, int, error) {
 					capturedFilter = f
-					return []*domain.Product{}, 0, nil
+					return []*models.Product{}, 0, nil
 				},
 			}
 			f := tt.input
@@ -208,21 +214,21 @@ func TestProductList_PaginationDefaults(t *testing.T) {
 func TestProductListBySeller_PaginationDefaults(t *testing.T) {
 	tests := []struct {
 		name      string
-		input     domain.ProductFilter
+		input     models.ProductFilter
 		wantPage  int
 		wantLimit int
 	}{
-		{name: "zero values use defaults", input: domain.ProductFilter{}, wantPage: 1, wantLimit: 20},
-		{name: "limit over 100 is capped", input: domain.ProductFilter{Page: 1, Limit: 150}, wantPage: 1, wantLimit: 100},
+		{name: "zero values use defaults", input: models.ProductFilter{}, wantPage: 1, wantLimit: 20},
+		{name: "limit over 100 is capped", input: models.ProductFilter{Page: 1, Limit: 150}, wantPage: 1, wantLimit: 100},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var capturedFilter *domain.ProductFilter
+			var capturedFilter *models.ProductFilter
 			productRepo := &testutil.MockProductRepo{
-				ListBySellerFn: func(_ context.Context, _ int64, f *domain.ProductFilter) ([]*domain.Product, int, error) {
+				ListBySellerFn: func(_ context.Context, _ int64, f *models.ProductFilter) ([]*models.Product, int, error) {
 					capturedFilter = f
-					return []*domain.Product{}, 0, nil
+					return []*models.Product{}, 0, nil
 				},
 			}
 			f := tt.input
@@ -235,12 +241,12 @@ func TestProductListBySeller_PaginationDefaults(t *testing.T) {
 }
 
 func TestProductListCategories(t *testing.T) {
-	cats := []*domain.Category{
+	cats := []*models.Category{
 		{ID: 1, Name: "Electronics"},
 		{ID: 2, Name: "Books"},
 	}
 	productRepo := &testutil.MockProductRepo{
-		ListCategoriesFn: func(_ context.Context) ([]*domain.Category, error) {
+		ListCategoriesFn: func(_ context.Context) ([]*models.Category, error) {
 			return cats, nil
 		},
 	}
@@ -252,11 +258,11 @@ func TestProductListCategories(t *testing.T) {
 
 func TestProductListCategories_Error(t *testing.T) {
 	productRepo := &testutil.MockProductRepo{
-		ListCategoriesFn: func(_ context.Context) ([]*domain.Category, error) {
-			return nil, apperrors.ErrInternal
+		ListCategoriesFn: func(_ context.Context) ([]*models.Category, error) {
+			return nil, apperrors.Internal("internal server error", nil)
 		},
 	}
 
 	_, err := service.NewProductService(productRepo).ListCategories(context.Background())
-	assert.Equal(t, apperrors.ErrInternal, err)
+	assertCode(t, err, http.StatusInternalServerError)
 }

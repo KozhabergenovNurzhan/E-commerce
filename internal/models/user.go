@@ -1,4 +1,4 @@
-package domain
+package models
 
 import "time"
 
@@ -11,7 +11,7 @@ const (
 	RoleAdmin    Role = "admin"
 )
 
-type User struct {
+type UserRecord struct {
 	ID           int64     `db:"id"`
 	Email        string    `db:"email"`
 	PasswordHash string    `db:"password_hash"`
@@ -23,23 +23,19 @@ type User struct {
 	UpdatedAt    time.Time `db:"updated_at"`
 }
 
-// ── Request DTOs ──────────────────────────────────────────────────────────────
-
-type RegisterRequest struct {
+type Register struct {
 	Email     string `json:"email"      binding:"required,email"`
 	Password  string `json:"password"   binding:"required,min=8"`
 	FirstName string `json:"first_name" binding:"required"`
 	LastName  string `json:"last_name"  binding:"required"`
 }
 
-type LoginRequest struct {
+type Login struct {
 	Email    string `json:"email"    binding:"required,email"`
 	Password string `json:"password" binding:"required"`
 }
 
-// ── Response DTOs ─────────────────────────────────────────────────────────────
-
-type UserResponse struct {
+type User struct {
 	ID        int64     `json:"id"`
 	Email     string    `json:"email"`
 	FirstName string    `json:"first_name"`
@@ -48,8 +44,8 @@ type UserResponse struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func (u *User) ToResponse() *UserResponse {
-	return &UserResponse{
+func (u *UserRecord) ToResponse() *User {
+	return &User{
 		ID:        u.ID,
 		Email:     u.Email,
 		FirstName: u.FirstName,
@@ -59,7 +55,7 @@ func (u *User) ToResponse() *UserResponse {
 	}
 }
 
-type AuthResponse struct {
-	User   *UserResponse `json:"user"`
-	Tokens *AuthTokens   `json:"tokens"`
+type Auth struct {
+	User   *User       `json:"user"`
+	Tokens *AuthTokens `json:"tokens"`
 }

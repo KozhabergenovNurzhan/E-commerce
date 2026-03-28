@@ -4,18 +4,18 @@ import (
 	"log/slog"
 	"strconv"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/response"
 	"github.com/gin-gonic/gin"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/middleware"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/response"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 )
 
 // POST /api/v1/orders
 func (h *Handler) CreateOrder(c *gin.Context) {
 	userID := middleware.MustUserID(c)
 
-	var req domain.CreateOrderRequest
+	var req models.CreateOrder
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
@@ -66,8 +66,8 @@ func (h *Handler) GetOrderByID(c *gin.Context) {
 	}
 
 	callerID := middleware.MustUserID(c)
-	callerRole := c.MustGet(middleware.CtxUserRole).(domain.Role)
-	if callerRole != domain.RoleAdmin && order.UserID != callerID {
+	callerRole := c.MustGet(middleware.CtxUserRole).(models.Role)
+	if callerRole != models.RoleAdmin && order.UserID != callerID {
 		response.Forbidden(c, "access denied")
 		return
 	}
@@ -83,7 +83,7 @@ func (h *Handler) UpdateOrderStatus(c *gin.Context) {
 		return
 	}
 
-	var req domain.UpdateOrderStatusRequest
+	var req models.UpdateOrderStatus
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return

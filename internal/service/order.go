@@ -3,32 +3,27 @@ package service
 import (
 	"context"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
+	"github.com/jmoiron/sqlx"
+
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/utils"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/utils"
 )
 
-type OrderService interface {
-	Create(ctx context.Context, userID int64, req *domain.CreateOrderRequest) (*domain.Order, error)
-	GetByID(ctx context.Context, id int64) (*domain.Order, error)
-	ListByUser(ctx context.Context, userID int64, page, limit int) ([]*domain.Order, int, error)
-	Cancel(ctx context.Context, id int64) error
-	UpdateStatus(ctx context.Context, id int64, status domain.OrderStatus) error
-}
-
-type orderService struct {
+type OrderService struct {
+	db          *sqlx.DB
 	orderRepo   repository.OrderRepository
 	productRepo repository.ProductRepository
 }
 
-func NewOrderService(orderRepo repository.OrderRepository, productRepo repository.ProductRepository) OrderService {
-	return &orderService{orderRepo: orderRepo, productRepo: productRepo}
+func NewOrderService(db *sqlx.DB, orderRepo repository.OrderRepository, productRepo repository.ProductRepository) *OrderService {
+	return &OrderService{db: db, orderRepo: orderRepo, productRepo: productRepo}
 }
 
-func (s *orderService) Create(ctx context.Context, userID int64, req *domain.CreateOrderRequest) (*domain.Order, error) {
+func (s *OrderService) Create(ctx context.Context, userID int64, req *models.CreateOrder) (*models.Order, error) {
 	var total float64
-	items := make([]domain.OrderItem, 0, len(req.Items))
+	items := make([]models.OrderItem, 0, len(req.Items))
 
 	for _, r := range req.Items {
 		product, err := s.productRepo.FindByID(ctx, r.ProductID)
@@ -36,10 +31,11 @@ func (s *orderService) Create(ctx context.Context, userID int64, req *domain.Cre
 			return nil, err
 		}
 		if product.Stock < r.Quantity {
-			return nil, apperrors.ErrBadRequest
+			return nil, apperrors.BadRequest("insufficient stock", nil)
 		}
 		total += product.Price * float64(r.Quantity)
-		items = append(items, domain.OrderItem{
+
+		items = append(items, models.OrderItem{
 			ProductID: r.ProductID,
 			Quantity:  r.Quantity,
 			UnitPrice: product.Price,
@@ -47,26 +43,77 @@ func (s *orderService) Create(ctx context.Context, userID int64, req *domain.Cre
 	}
 
 	now := utils.Now()
-	order := &domain.Order{
+	order := &models.Order{
 		UserID:     userID,
-		Status:     domain.OrderStatusPending,
+		Status:     models.OrderStatusPending,
 		TotalPrice: total,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		Items:      items,
 	}
 
-	if err := s.orderRepo.Create(ctx, order); err != nil {
-		return nil, err
+	if s.db == nil {
+		// test path: no real DB, delegate to repo mock
+		if err := s.orderRepo.Create(ctx, order); err != nil {
+			return nil, err
+		}
+		return order, nil
+	}
+
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, apperrors.Internal("internal server error", err)
+	}
+	defer tx.Rollback()
+
+	const qOrder = `
+		INSERT INTO orders (user_id, status, total_price, created_at, updated_at)
+		VALUES (:user_id, :status, :total_price, :created_at, :updated_at)
+		RETURNING id`
+	rows, err := sqlx.NamedQueryContext(ctx, tx, qOrder, order)
+	if err != nil {
+		return nil, apperrors.Internal("internal server error", err)
+	}
+	if rows.Next() {
+		rows.Scan(&order.ID)
+	}
+	rows.Close()
+
+	const qItem = `
+		INSERT INTO order_items (order_id, product_id, quantity, unit_price)
+		VALUES (:order_id, :product_id, :quantity, :unit_price)
+		RETURNING id`
+	for i := range order.Items {
+		order.Items[i].OrderID = order.ID
+
+		rows, err := sqlx.NamedQueryContext(ctx, tx, qItem, order.Items[i])
+		if err != nil {
+			return nil, apperrors.Internal("internal server error", err)
+		}
+		if rows.Next() {
+			rows.Scan(&order.Items[i].ID)
+		}
+		rows.Close()
+	}
+
+	const qStock = `UPDATE products SET stock = stock - $1 WHERE id = $2`
+	for _, item := range order.Items {
+		if _, err := tx.ExecContext(ctx, qStock, item.Quantity, item.ProductID); err != nil {
+			return nil, apperrors.Internal("internal server error", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, apperrors.Internal("internal server error", err)
 	}
 	return order, nil
 }
 
-func (s *orderService) GetByID(ctx context.Context, id int64) (*domain.Order, error) {
+func (s *OrderService) GetByID(ctx context.Context, id int64) (*models.Order, error) {
 	return s.orderRepo.FindByID(ctx, id)
 }
 
-func (s *orderService) ListByUser(ctx context.Context, userID int64, page, limit int) ([]*domain.Order, int, error) {
+func (s *OrderService) ListByUser(ctx context.Context, userID int64, page, limit int) ([]*models.Order, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -76,20 +123,20 @@ func (s *orderService) ListByUser(ctx context.Context, userID int64, page, limit
 	return s.orderRepo.ListByUser(ctx, userID, limit, (page-1)*limit)
 }
 
-func (s *orderService) UpdateStatus(ctx context.Context, id int64, status domain.OrderStatus) error {
+func (s *OrderService) UpdateStatus(ctx context.Context, id int64, status models.OrderStatus) error {
 	if _, err := s.orderRepo.FindByID(ctx, id); err != nil {
 		return err
 	}
 	return s.orderRepo.UpdateStatus(ctx, id, status)
 }
 
-func (s *orderService) Cancel(ctx context.Context, id int64) error {
+func (s *OrderService) Cancel(ctx context.Context, id int64) error {
 	order, err := s.orderRepo.FindByID(ctx, id)
 	if err != nil {
 		return err
 	}
-	if order.Status != domain.OrderStatusPending {
-		return apperrors.ErrBadRequest
+	if order.Status != models.OrderStatusPending {
+		return apperrors.BadRequest("only pending orders can be cancelled", nil)
 	}
-	return s.orderRepo.UpdateStatus(ctx, id, domain.OrderStatusCancelled)
+	return s.orderRepo.UpdateStatus(ctx, id, models.OrderStatusCancelled)
 }

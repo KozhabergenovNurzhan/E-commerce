@@ -3,11 +3,11 @@ package handler
 import (
 	"strconv"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/response"
 	"github.com/gin-gonic/gin"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/middleware"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/response"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 )
 
 // GET /api/v1/cart
@@ -26,7 +26,7 @@ func (h *Handler) GetCart(c *gin.Context) {
 func (h *Handler) AddToCart(c *gin.Context) {
 	userID := middleware.MustUserID(c)
 
-	var req domain.AddToCartRequest
+	var req models.AddToCart
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
@@ -49,7 +49,7 @@ func (h *Handler) UpdateCartItem(c *gin.Context) {
 		return
 	}
 
-	var req domain.UpdateCartItemRequest
+	var req models.UpdateCartItem
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return

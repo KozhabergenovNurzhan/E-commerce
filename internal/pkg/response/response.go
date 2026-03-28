@@ -3,8 +3,8 @@ package response
 import (
 	"net/http"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/gin-gonic/gin"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
 )
 
 type Response struct {

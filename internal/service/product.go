@@ -3,32 +3,22 @@ package service
 import (
 	"context"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/utils"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/utils"
 )
 
-type ProductService interface {
-	Create(ctx context.Context, sellerID *int64, req *domain.CreateProductRequest) (*domain.Product, error)
-	GetByID(ctx context.Context, id int64) (*domain.Product, error)
-	Update(ctx context.Context, id int64, req *domain.UpdateProductRequest) (*domain.Product, error)
-	Delete(ctx context.Context, id int64) error
-	List(ctx context.Context, f *domain.ProductFilter) ([]*domain.Product, int, error)
-	ListBySeller(ctx context.Context, sellerID int64, f *domain.ProductFilter) ([]*domain.Product, int, error)
-	ListCategories(ctx context.Context) ([]*domain.Category, error)
-}
-
-type productService struct {
+type ProductService struct {
 	repo repository.ProductRepository
 }
 
-func NewProductService(repo repository.ProductRepository) ProductService {
-	return &productService{repo: repo}
+func NewProductService(repo repository.ProductRepository) *ProductService {
+	return &ProductService{repo: repo}
 }
 
-func (s *productService) Create(ctx context.Context, sellerID *int64, req *domain.CreateProductRequest) (*domain.Product, error) {
+func (s *ProductService) Create(ctx context.Context, sellerID *int64, req *models.CreateProduct) (*models.Product, error) {
 	now := utils.Now()
-	p := &domain.Product{
+	p := &models.Product{
 		CategoryID:  req.CategoryID,
 		SellerID:    sellerID,
 		Name:        req.Name,
@@ -40,17 +30,19 @@ func (s *productService) Create(ctx context.Context, sellerID *int64, req *domai
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
+
 	if err := s.repo.Create(ctx, p); err != nil {
 		return nil, err
 	}
+
 	return p, nil
 }
 
-func (s *productService) GetByID(ctx context.Context, id int64) (*domain.Product, error) {
+func (s *ProductService) GetByID(ctx context.Context, id int64) (*models.Product, error) {
 	return s.repo.FindByID(ctx, id)
 }
 
-func (s *productService) Update(ctx context.Context, id int64, req *domain.UpdateProductRequest) (*domain.Product, error) {
+func (s *ProductService) Update(ctx context.Context, id int64, req *models.UpdateProduct) (*models.Product, error) {
 	p, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -61,17 +53,19 @@ func (s *productService) Update(ctx context.Context, id int64, req *domain.Updat
 	p.Stock = req.Stock
 	p.ImageURL = req.ImageURL
 	p.UpdatedAt = utils.Now()
+
 	if err := s.repo.Update(ctx, p); err != nil {
 		return nil, err
 	}
+
 	return p, nil
 }
 
-func (s *productService) Delete(ctx context.Context, id int64) error {
+func (s *ProductService) Delete(ctx context.Context, id int64) error {
 	return s.repo.Delete(ctx, id)
 }
 
-func (s *productService) List(ctx context.Context, f *domain.ProductFilter) ([]*domain.Product, int, error) {
+func (s *ProductService) List(ctx context.Context, f *models.ProductFilter) ([]*models.Product, int, error) {
 	if f.Page < 1 {
 		f.Page = 1
 	}
@@ -84,7 +78,7 @@ func (s *productService) List(ctx context.Context, f *domain.ProductFilter) ([]*
 	return s.repo.List(ctx, f)
 }
 
-func (s *productService) ListBySeller(ctx context.Context, sellerID int64, f *domain.ProductFilter) ([]*domain.Product, int, error) {
+func (s *ProductService) ListBySeller(ctx context.Context, sellerID int64, f *models.ProductFilter) ([]*models.Product, int, error) {
 	if f.Page < 1 {
 		f.Page = 1
 	}
@@ -97,6 +91,6 @@ func (s *productService) ListBySeller(ctx context.Context, sellerID int64, f *do
 	return s.repo.ListBySeller(ctx, sellerID, f)
 }
 
-func (s *productService) ListCategories(ctx context.Context) ([]*domain.Category, error) {
+func (s *ProductService) ListCategories(ctx context.Context) ([]*models.Category, error) {
 	return s.repo.ListCategories(ctx)
 }

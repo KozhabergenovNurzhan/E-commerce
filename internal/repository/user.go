@@ -6,19 +6,19 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 )
 
 type UserRepository interface {
-	Create(ctx context.Context, user *domain.User) error
-	FindByID(ctx context.Context, id int64) (*domain.User, error)
-	FindByEmail(ctx context.Context, email string) (*domain.User, error)
-	Update(ctx context.Context, user *domain.User) error
+	Create(ctx context.Context, user *models.UserRecord) error
+	FindByID(ctx context.Context, id int64) (*models.UserRecord, error)
+	FindByEmail(ctx context.Context, email string) (*models.UserRecord, error)
+	Update(ctx context.Context, user *models.UserRecord) error
 	Delete(ctx context.Context, id int64) error
-	List(ctx context.Context, limit, offset int) ([]*domain.User, int, error)
+	List(ctx context.Context, limit, offset int) ([]*models.UserRecord, int, error)
 }
 
 type userRepository struct {
@@ -29,7 +29,7 @@ func NewUserRepository(db *sqlx.DB) UserRepository {
 	return &userRepository{db: db}
 }
 
-func (r *userRepository) Create(ctx context.Context, user *domain.User) error {
+func (r *userRepository) Create(ctx context.Context, user *models.UserRecord) error {
 	const q = `
 		INSERT INTO users (email, password_hash, first_name, last_name, role, is_active, created_at, updated_at)
 		VALUES (:email, :password_hash, :first_name, :last_name, :role, :is_active, :created_at, :updated_at)
@@ -38,42 +38,50 @@ func (r *userRepository) Create(ctx context.Context, user *domain.User) error {
 	rows, err := r.db.NamedQueryContext(ctx, q, user)
 	if err != nil {
 		if strings.Contains(err.Error(), "23505") {
-			return apperrors.ErrConflict
+			return apperrors.Conflict("email already taken", nil)
 		}
-		return apperrors.ErrInternal
+		return apperrors.Internal("internal server error", err)
 	}
 	defer rows.Close()
+
 	if rows.Next() {
 		rows.Scan(&user.ID)
 	}
+
 	return nil
 }
 
-func (r *userRepository) FindByID(ctx context.Context, id int64) (*domain.User, error) {
-	var u domain.User
+func (r *userRepository) FindByID(ctx context.Context, id int64) (*models.UserRecord, error) {
+	var u models.UserRecord
+
 	const q = `SELECT * FROM users WHERE id = $1 AND is_active = true`
+
 	if err := r.db.GetContext(ctx, &u, q, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, apperrors.ErrNotFound
+			return nil, apperrors.NotFound("user not found", nil)
 		}
-		return nil, apperrors.ErrInternal
+		return nil, apperrors.Internal("internal server error", err)
 	}
+
 	return &u, nil
 }
 
-func (r *userRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
-	var u domain.User
+func (r *userRepository) FindByEmail(ctx context.Context, email string) (*models.UserRecord, error) {
+	var u models.UserRecord
+
 	const q = `SELECT * FROM users WHERE email = $1 AND is_active = true`
+
 	if err := r.db.GetContext(ctx, &u, q, email); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, apperrors.ErrNotFound
+			return nil, apperrors.NotFound("user not found", nil)
 		}
-		return nil, apperrors.ErrInternal
+		return nil, apperrors.Internal("internal server error", err)
 	}
+
 	return &u, nil
 }
 
-func (r *userRepository) Update(ctx context.Context, user *domain.User) error {
+func (r *userRepository) Update(ctx context.Context, user *models.UserRecord) error {
 	const q = `
 		UPDATE users
 		SET first_name = :first_name, last_name = :last_name, updated_at = :updated_at
@@ -81,33 +89,42 @@ func (r *userRepository) Update(ctx context.Context, user *domain.User) error {
 
 	result, err := r.db.NamedExecContext(ctx, q, user)
 	if err != nil {
-		return apperrors.ErrInternal
+		return apperrors.Internal("internal server error", err)
 	}
+
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperrors.ErrNotFound
+		return apperrors.NotFound("user not found", nil)
 	}
+
 	return nil
 }
 
 func (r *userRepository) Delete(ctx context.Context, id int64) error {
 	const q = `UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1 AND is_active = true`
+
 	result, err := r.db.ExecContext(ctx, q, id)
 	if err != nil {
-		return apperrors.ErrInternal
+		return apperrors.Internal("internal server error", err)
 	}
+
 	if n, _ := result.RowsAffected(); n == 0 {
-		return apperrors.ErrNotFound
+		return apperrors.NotFound("user not found", nil)
 	}
+
 	return nil
 }
 
-func (r *userRepository) List(ctx context.Context, limit, offset int) ([]*domain.User, int, error) {
-	var users []*domain.User
+func (r *userRepository) List(ctx context.Context, limit, offset int) ([]*models.UserRecord, int, error) {
+	var users []*models.UserRecord
+
 	const q = `SELECT * FROM users WHERE is_active = true ORDER BY created_at DESC LIMIT $1 OFFSET $2`
+
 	if err := r.db.SelectContext(ctx, &users, q, limit, offset); err != nil {
-		return nil, 0, apperrors.ErrInternal
+		return nil, 0, apperrors.Internal("internal server error", err)
 	}
+
 	var total int
 	_ = r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM users WHERE is_active = true`)
+
 	return users, total, nil
 }

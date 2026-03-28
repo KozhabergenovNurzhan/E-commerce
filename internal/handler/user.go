@@ -3,11 +3,11 @@ package handler
 import (
 	"strconv"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/response"
 	"github.com/gin-gonic/gin"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/middleware"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/response"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 )
 
 // GET /api/v1/users
@@ -54,8 +54,8 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	}
 
 	callerID := middleware.MustUserID(c)
-	callerRole := c.MustGet(middleware.CtxUserRole).(domain.Role)
-	if callerRole != domain.RoleAdmin && callerID != id {
+	callerRole := c.MustGet(middleware.CtxUserRole).(models.Role)
+	if callerRole != models.RoleAdmin && callerID != id {
 		response.Forbidden(c, "cannot update another user's profile")
 		return
 	}

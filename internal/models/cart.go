@@ -1,8 +1,8 @@
-package domain
+package models
 
 import "time"
 
-type CartItem struct {
+type CartItemRecord struct {
 	ID        int64     `db:"id"`
 	UserID    int64     `db:"user_id"`
 	ProductID int64     `db:"product_id"`
@@ -11,25 +11,23 @@ type CartItem struct {
 	UpdatedAt time.Time `db:"updated_at"`
 }
 
-type CartItemResponse struct {
+type CartItem struct {
 	ID       int64    `json:"id"`
 	Product  *Product `json:"product"`
 	Quantity int      `json:"quantity"`
 	Subtotal float64  `json:"subtotal"`
 }
 
-type CartResponse struct {
-	Items      []*CartItemResponse `json:"items"`
-	TotalPrice float64             `json:"total_price"`
+type Cart struct {
+	Items      []*CartItem `json:"items"`
+	TotalPrice float64     `json:"total_price"`
 }
 
-// ── Request DTOs ──────────────────────────────────────────────────────────────
-
-type AddToCartRequest struct {
+type AddToCart struct {
 	ProductID int64 `json:"product_id" binding:"required"`
 	Quantity  int   `json:"quantity"   binding:"required,min=1"`
 }
 
-type UpdateCartItemRequest struct {
+type UpdateCartItem struct {
 	Quantity int `json:"quantity" binding:"required,min=1"`
 }

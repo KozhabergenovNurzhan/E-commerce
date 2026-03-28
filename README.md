@@ -4,7 +4,7 @@ A production-ready e-commerce backend built with Go, Gin, PostgreSQL, and JWT au
 
 ## Tech Stack
 
-- **Go 1.23** — language
+- **Go 1.25.4** — language
 - **Gin** — HTTP framework
 - **PostgreSQL 16** — database
 - **sqlx + pgx** — database driver and query layer
@@ -33,6 +33,15 @@ docker-compose up -d postgres
 # 2. Copy env and run
 cp .env.example .env
 go run ./cmd/api
+```
+
+### Test
+
+```bash
+go test ./...
+
+# Force re-run (bypass cache)
+go test -count=1 ./...
 ```
 
 ## Configuration
@@ -88,13 +97,22 @@ go run ./cmd/api
 | PATCH | `/api/v1/orders/:id/cancel` | Owner | Cancel pending order |
 | PATCH | `/api/v1/orders/:id/status` | Admin / Manager | Update order status |
 
+### Cart
+| Method | Path | Access | Description |
+|--------|------|--------|-------------|
+| POST | `/api/v1/cart` | Auth | Add item to cart |
+| GET | `/api/v1/cart` | Auth | Get cart with totals |
+| PUT | `/api/v1/cart/:product_id` | Auth | Update item quantity |
+| DELETE | `/api/v1/cart/:product_id` | Auth | Remove item from cart |
+| DELETE | `/api/v1/cart` | Auth | Clear cart |
+
 ## Roles
 
 | Role | Capabilities |
 |------|-------------|
-| `customer` | Own profile, own orders |
+| `customer` | Own profile, own orders, cart |
 | `manager` | Update order status (confirmed → shipping → delivered) |
-| `seller` | Reserved for future multi-vendor features |
+| `seller` | Create and manage own products |
 | `admin` | Full access |
 
 ## Auth Flow
@@ -119,6 +137,7 @@ internal/
   repository/     # PostgreSQL data access layer
   server/         # HTTP server with graceful shutdown
   service/        # Business logic
+  testutil/       # Shared mock repositories for tests
 migrations/       # SQL migration files
 pkg/
   apperrors/      # Domain error types

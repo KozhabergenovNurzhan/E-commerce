@@ -1,4 +1,4 @@
-package domain
+package models
 
 import "time"
 
@@ -30,17 +30,15 @@ type OrderItem struct {
 	UnitPrice float64 `db:"unit_price"`
 }
 
-// ── Request DTOs ──────────────────────────────────────────────────────────────
-
-type CreateOrderRequest struct {
-	Items []CreateOrderItemRequest `json:"items" binding:"required,min=1,dive"`
+type CreateOrder struct {
+	Items []CreateOrderItem `json:"items" binding:"required,min=1,dive"`
 }
 
-type CreateOrderItemRequest struct {
+type CreateOrderItem struct {
 	ProductID int64 `json:"product_id" binding:"required"`
 	Quantity  int   `json:"quantity"   binding:"required,min=1"`
 }
 
-type UpdateOrderStatusRequest struct {
+type UpdateOrderStatus struct {
 	Status OrderStatus `json:"status" binding:"required,oneof=confirmed shipping delivered"`
 }

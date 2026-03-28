@@ -3,48 +3,56 @@ package service_test
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/service"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/testutil"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
 )
+
+func assertCode(t *testing.T, err error, code int) {
+	t.Helper()
+	var appErr *apperrors.AppError
+	require.True(t, errors.As(err, &appErr), "expected *apperrors.AppError, got %T: %v", err, err)
+	assert.Equal(t, code, appErr.Code)
+}
 
 func TestCartAddItem(t *testing.T) {
 	tests := []struct {
 		name        string
-		req         *domain.AddToCartRequest
-		findProduct func(ctx context.Context, id int64) (*domain.Product, error)
-		upsert      func(ctx context.Context, item *domain.CartItem) error
-		wantErr     error
+		req         *models.AddToCart
+		findProduct func(ctx context.Context, id int64) (*models.Product, error)
+		upsert      func(ctx context.Context, item *models.CartItemRecord) error
+		wantCode    int
 	}{
 		{
 			name: "success",
-			req:  &domain.AddToCartRequest{ProductID: 1, Quantity: 2},
-			findProduct: func(_ context.Context, id int64) (*domain.Product, error) {
-				return &domain.Product{ID: id, Stock: 10}, nil
+			req:  &models.AddToCart{ProductID: 1, Quantity: 2},
+			findProduct: func(_ context.Context, id int64) (*models.Product, error) {
+				return &models.Product{ID: id, Stock: 10}, nil
 			},
-			upsert: func(_ context.Context, item *domain.CartItem) error { return nil },
+			upsert: func(_ context.Context, item *models.CartItemRecord) error { return nil },
 		},
 		{
 			name: "product not found",
-			req:  &domain.AddToCartRequest{ProductID: 99, Quantity: 1},
-			findProduct: func(_ context.Context, _ int64) (*domain.Product, error) {
-				return nil, apperrors.ErrNotFound
+			req:  &models.AddToCart{ProductID: 99, Quantity: 1},
+			findProduct: func(_ context.Context, _ int64) (*models.Product, error) {
+				return nil, apperrors.NotFound("product not found", nil)
 			},
-			wantErr: apperrors.ErrNotFound,
+			wantCode: http.StatusNotFound,
 		},
 		{
 			name: "insufficient stock",
-			req:  &domain.AddToCartRequest{ProductID: 1, Quantity: 5},
-			findProduct: func(_ context.Context, id int64) (*domain.Product, error) {
-				return &domain.Product{ID: id, Stock: 3}, nil
+			req:  &models.AddToCart{ProductID: 1, Quantity: 5},
+			findProduct: func(_ context.Context, id int64) (*models.Product, error) {
+				return &models.Product{ID: id, Stock: 3}, nil
 			},
-			wantErr: apperrors.ErrBadRequest,
+			wantCode: http.StatusBadRequest,
 		},
 	}
 
@@ -56,7 +64,11 @@ func TestCartAddItem(t *testing.T) {
 			err := service.NewCartService(cartRepo, productRepo).
 				AddItem(context.Background(), 1, tt.req)
 
-			assert.Equal(t, tt.wantErr, err)
+			if tt.wantCode != 0 {
+				assertCode(t, err, tt.wantCode)
+				return
+			}
+			require.NoError(t, err)
 		})
 	}
 }
@@ -64,34 +76,33 @@ func TestCartAddItem(t *testing.T) {
 func TestCartGetCart(t *testing.T) {
 	tests := []struct {
 		name        string
-		items       []*domain.CartItem
-		findProduct func(ctx context.Context, id int64) (*domain.Product, error)
-		check       func(t *testing.T, resp *domain.CartResponse)
+		items       []*models.CartItemRecord
+		findProduct func(ctx context.Context, id int64) (*models.Product, error)
+		check       func(t *testing.T, resp *models.Cart)
 	}{
 		{
 			name:  "empty cart",
-			items: []*domain.CartItem{},
-			findProduct: func(_ context.Context, _ int64) (*domain.Product, error) {
-				return nil, apperrors.ErrNotFound
+			items: []*models.CartItemRecord{},
+			findProduct: func(_ context.Context, _ int64) (*models.Product, error) {
+				return nil, apperrors.NotFound("product not found", nil)
 			},
-			check: func(t *testing.T, resp *domain.CartResponse) {
+			check: func(t *testing.T, resp *models.Cart) {
 				assert.Empty(t, resp.Items)
 				assert.Equal(t, 0.0, resp.TotalPrice)
 			},
 		},
 		{
 			name: "calculates subtotals and total",
-			items: []*domain.CartItem{
+			items: []*models.CartItemRecord{
 				{ID: 1, UserID: 1, ProductID: 10, Quantity: 2},
 				{ID: 2, UserID: 1, ProductID: 20, Quantity: 3},
 			},
-			findProduct: func(_ context.Context, id int64) (*domain.Product, error) {
+			findProduct: func(_ context.Context, id int64) (*models.Product, error) {
 				prices := map[int64]float64{10: 5.0, 20: 10.0}
-				return &domain.Product{ID: id, Price: prices[id]}, nil
+				return &models.Product{ID: id, Price: prices[id]}, nil
 			},
-			check: func(t *testing.T, resp *domain.CartResponse) {
+			check: func(t *testing.T, resp *models.Cart) {
 				require.Len(t, resp.Items, 2)
-				// item 1: 2 * 5.0 = 10; item 2: 3 * 10.0 = 30; total = 40
 				assert.Equal(t, 40.0, resp.TotalPrice)
 				assert.Equal(t, 10.0, resp.Items[0].Subtotal)
 				assert.Equal(t, 30.0, resp.Items[1].Subtotal)
@@ -99,17 +110,17 @@ func TestCartGetCart(t *testing.T) {
 		},
 		{
 			name: "skips items whose product is no longer available",
-			items: []*domain.CartItem{
+			items: []*models.CartItemRecord{
 				{ID: 1, UserID: 1, ProductID: 10, Quantity: 1},
 				{ID: 2, UserID: 1, ProductID: 99, Quantity: 1},
 			},
-			findProduct: func(_ context.Context, id int64) (*domain.Product, error) {
+			findProduct: func(_ context.Context, id int64) (*models.Product, error) {
 				if id == 10 {
-					return &domain.Product{ID: id, Price: 20.0}, nil
+					return &models.Product{ID: id, Price: 20.0}, nil
 				}
-				return nil, apperrors.ErrNotFound
+				return nil, apperrors.NotFound("product not found", nil)
 			},
-			check: func(t *testing.T, resp *domain.CartResponse) {
+			check: func(t *testing.T, resp *models.Cart) {
 				require.Len(t, resp.Items, 1)
 				assert.Equal(t, 20.0, resp.TotalPrice)
 			},
@@ -119,7 +130,7 @@ func TestCartGetCart(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cartRepo := &testutil.MockCartRepo{
-				FindByUserIDFn: func(_ context.Context, _ int64) ([]*domain.CartItem, error) {
+				FindByUserIDFn: func(_ context.Context, _ int64) ([]*models.CartItemRecord, error) {
 					return tt.items, nil
 				},
 			}
@@ -135,60 +146,63 @@ func TestCartGetCart(t *testing.T) {
 }
 
 func TestCartGetCart_RepoError(t *testing.T) {
-	repoErr := errors.New("db down")
 	cartRepo := &testutil.MockCartRepo{
-		FindByUserIDFn: func(_ context.Context, _ int64) ([]*domain.CartItem, error) {
-			return nil, repoErr
+		FindByUserIDFn: func(_ context.Context, _ int64) ([]*models.CartItemRecord, error) {
+			return nil, apperrors.Internal("internal server error", nil)
 		},
 	}
 
 	_, err := service.NewCartService(cartRepo, nil).GetCart(context.Background(), 1)
-	assert.Equal(t, repoErr, err)
+	assertCode(t, err, http.StatusInternalServerError)
 }
 
 func TestCartUpdateItem(t *testing.T) {
 	tests := []struct {
 		name        string
 		quantity    int
-		findProduct func(ctx context.Context, id int64) (*domain.Product, error)
-		wantErr     error
+		findProduct func(ctx context.Context, id int64) (*models.Product, error)
+		wantCode    int
 	}{
 		{
 			name:     "success",
 			quantity: 2,
-			findProduct: func(_ context.Context, id int64) (*domain.Product, error) {
-				return &domain.Product{ID: id, Stock: 10}, nil
+			findProduct: func(_ context.Context, id int64) (*models.Product, error) {
+				return &models.Product{ID: id, Stock: 10}, nil
 			},
 		},
 		{
 			name:     "product not found",
 			quantity: 1,
-			findProduct: func(_ context.Context, _ int64) (*domain.Product, error) {
-				return nil, apperrors.ErrNotFound
+			findProduct: func(_ context.Context, _ int64) (*models.Product, error) {
+				return nil, apperrors.NotFound("product not found", nil)
 			},
-			wantErr: apperrors.ErrNotFound,
+			wantCode: http.StatusNotFound,
 		},
 		{
 			name:     "exceeds stock",
 			quantity: 99,
-			findProduct: func(_ context.Context, id int64) (*domain.Product, error) {
-				return &domain.Product{ID: id, Stock: 5}, nil
+			findProduct: func(_ context.Context, id int64) (*models.Product, error) {
+				return &models.Product{ID: id, Stock: 5}, nil
 			},
-			wantErr: apperrors.ErrBadRequest,
+			wantCode: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cartRepo := &testutil.MockCartRepo{
-				UpsertFn: func(_ context.Context, _ *domain.CartItem) error { return nil },
+				UpsertFn: func(_ context.Context, _ *models.CartItemRecord) error { return nil },
 			}
 			productRepo := &testutil.MockProductRepo{FindByIDFn: tt.findProduct}
 
 			err := service.NewCartService(cartRepo, productRepo).
-				UpdateItem(context.Background(), 1, 1, &domain.UpdateCartItemRequest{Quantity: tt.quantity})
+				UpdateItem(context.Background(), 1, 1, &models.UpdateCartItem{Quantity: tt.quantity})
 
-			assert.Equal(t, tt.wantErr, err)
+			if tt.wantCode != 0 {
+				assertCode(t, err, tt.wantCode)
+				return
+			}
+			require.NoError(t, err)
 		})
 	}
 }

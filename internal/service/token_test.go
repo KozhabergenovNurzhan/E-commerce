@@ -2,32 +2,33 @@ package service_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/service"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/testutil"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
 )
 
 func TestGenerateTokenPair(t *testing.T) {
 	tests := []struct {
 		name          string
-		generateFn    func(int64, domain.Role) (string, error)
-		saveFn        func(context.Context, *domain.RefreshToken) error
-		wantErr       error
+		generateFn    func(int64, models.Role) (string, error)
+		saveFn        func(context.Context, *models.RefreshToken) error
+		wantCode      int
 		wantAccessTok string
 	}{
 		{
 			name: "success",
-			generateFn: func(_ int64, _ domain.Role) (string, error) {
+			generateFn: func(_ int64, _ models.Role) (string, error) {
 				return "access-token", nil
 			},
-			saveFn: func(_ context.Context, rt *domain.RefreshToken) error {
+			saveFn: func(_ context.Context, rt *models.RefreshToken) error {
 				rt.ID = 1
 				return nil
 			},
@@ -35,10 +36,10 @@ func TestGenerateTokenPair(t *testing.T) {
 		},
 		{
 			name: "auth manager failure",
-			generateFn: func(_ int64, _ domain.Role) (string, error) {
-				return "", apperrors.ErrInternal
+			generateFn: func(_ int64, _ models.Role) (string, error) {
+				return "", apperrors.Internal("token generation failed", nil)
 			},
-			wantErr: apperrors.ErrInternal,
+			wantCode: http.StatusInternalServerError,
 		},
 	}
 
@@ -50,11 +51,11 @@ func TestGenerateTokenPair(t *testing.T) {
 			}
 			tokenRepo := &testutil.MockTokenRepo{SaveFn: tt.saveFn}
 
-			svc := service.NewTokenService(tokenRepo, nil, authMgr, 7*24*time.Hour)
-			tokens, err := svc.GenerateTokenPair(context.Background(), 1, domain.RoleCustomer)
+			svc := service.NewTokenService(nil, tokenRepo, nil, authMgr, 7*24*time.Hour)
+			tokens, err := svc.GenerateTokenPair(context.Background(), 1, models.RoleCustomer)
 
-			if tt.wantErr != nil {
-				assert.Equal(t, tt.wantErr, err)
+			if tt.wantCode != 0 {
+				assertCode(t, err, tt.wantCode)
 				return
 			}
 			require.NoError(t, err)
@@ -68,14 +69,14 @@ func TestGenerateTokenPair(t *testing.T) {
 func TestRefresh(t *testing.T) {
 	tests := []struct {
 		name         string
-		storedToken  *domain.RefreshToken
+		storedToken  *models.RefreshToken
 		findErr      error
-		wantErr      error
+		wantCode     int
 		wantNewToken bool
 	}{
 		{
 			name: "success",
-			storedToken: &domain.RefreshToken{
+			storedToken: &models.RefreshToken{
 				ID:        1,
 				UserID:    1,
 				Revoked:   false,
@@ -85,59 +86,59 @@ func TestRefresh(t *testing.T) {
 		},
 		{
 			name: "revoked token",
-			storedToken: &domain.RefreshToken{
+			storedToken: &models.RefreshToken{
 				Revoked:   true,
 				ExpiresAt: time.Now().Add(time.Hour),
 			},
-			wantErr: apperrors.ErrUnauthorized,
+			wantCode: http.StatusUnauthorized,
 		},
 		{
 			name: "expired token",
-			storedToken: &domain.RefreshToken{
+			storedToken: &models.RefreshToken{
 				Revoked:   false,
 				ExpiresAt: time.Now().Add(-time.Hour),
 			},
-			wantErr: apperrors.ErrUnauthorized,
+			wantCode: http.StatusUnauthorized,
 		},
 		{
-			name:    "token not found",
-			findErr: apperrors.ErrNotFound,
-			wantErr: apperrors.ErrUnauthorized,
+			name:     "token not found",
+			findErr:  apperrors.NotFound("token not found", nil),
+			wantCode: http.StatusUnauthorized,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tokenRepo := &testutil.MockTokenRepo{
-				FindByHashFn: func(_ context.Context, _ string) (*domain.RefreshToken, error) {
+				FindByHashFn: func(_ context.Context, _ string) (*models.RefreshToken, error) {
 					if tt.findErr != nil {
 						return nil, tt.findErr
 					}
 					return tt.storedToken, nil
 				},
 				RevokeFn: func(_ context.Context, _ string) error { return nil },
-				SaveFn: func(_ context.Context, rt *domain.RefreshToken) error {
+				SaveFn: func(_ context.Context, rt *models.RefreshToken) error {
 					rt.ID = 2
 					return nil
 				},
 			}
 			userRepo := &testutil.MockUserRepo{
-				FindByIDFn: func(_ context.Context, id int64) (*domain.User, error) {
-					return &domain.User{ID: id, Role: domain.RoleCustomer}, nil
+				FindByIDFn: func(_ context.Context, id int64) (*models.UserRecord, error) {
+					return &models.UserRecord{ID: id, Role: models.RoleCustomer}, nil
 				},
 			}
 			authMgr := &testutil.MockAuthManager{
-				GenerateAccessTokenFn: func(_ int64, _ domain.Role) (string, error) {
+				GenerateAccessTokenFn: func(_ int64, _ models.Role) (string, error) {
 					return "new-access-token", nil
 				},
 				AccessTTLFn: func() time.Duration { return 15 * time.Minute },
 			}
 
-			svc := service.NewTokenService(tokenRepo, userRepo, authMgr, 7*24*time.Hour)
+			svc := service.NewTokenService(nil, tokenRepo, userRepo, authMgr, 7*24*time.Hour)
 			tokens, err := svc.Refresh(context.Background(), "some-refresh-token")
 
-			if tt.wantErr != nil {
-				assert.Equal(t, tt.wantErr, err)
+			if tt.wantCode != 0 {
+				assertCode(t, err, tt.wantCode)
 				return
 			}
 			require.NoError(t, err)

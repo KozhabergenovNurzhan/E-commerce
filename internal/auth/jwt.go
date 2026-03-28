@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 )
 
 type JWTManager struct {
@@ -22,7 +22,7 @@ func NewJWTManager(secret string, accessTTL time.Duration) *JWTManager {
 	}
 }
 
-func (m *JWTManager) GenerateAccessToken(userID int64, role domain.Role) (string, error) {
+func (m *JWTManager) GenerateAccessToken(userID int64, role models.Role) (string, error) {
 	claims := &Claims{
 		UserID: userID,
 		Role:   role,
@@ -38,16 +38,16 @@ func (m *JWTManager) GenerateAccessToken(userID int64, role domain.Role) (string
 func (m *JWTManager) ValidateAccessToken(token string) (*Claims, error) {
 	parsed, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, apperrors.ErrUnauthorized
+			return nil, apperrors.Unauthorized("unauthorized", nil)
 		}
 		return m.secret, nil
 	})
 	if err != nil || !parsed.Valid {
-		return nil, apperrors.ErrUnauthorized
+		return nil, apperrors.Unauthorized("unauthorized", nil)
 	}
 	claims, ok := parsed.Claims.(*Claims)
 	if !ok {
-		return nil, apperrors.ErrUnauthorized
+		return nil, apperrors.Unauthorized("unauthorized", nil)
 	}
 	return claims, nil
 }

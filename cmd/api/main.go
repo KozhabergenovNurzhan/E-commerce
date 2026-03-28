@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -16,17 +17,17 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/config"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/auth"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/config"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/handler"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/server"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/service"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/logger"
 )
 
 func main() {
 	cfg := config.Load()
+
 	log := logger.New("ecommerce", cfg.LogLevel)
 	slog.SetDefault(log)
 
@@ -37,7 +38,6 @@ func main() {
 	}
 
 	srv := server.New(cfg.Port, router)
-
 	go func() {
 		log.Info("server starting", slog.String("port", cfg.Port))
 		if err := srv.Run(); err != nil && err != http.ErrServerClosed {
@@ -71,17 +71,17 @@ func buildApp(cfg *config.Config, log *slog.Logger) (*gin.Engine, error) {
 
 	authMgr := auth.NewJWTManager(cfg.JWT.Secret, cfg.JWT.AccessTTL)
 
-	userRepo    := repository.NewUserRepository(db)
+	userRepo := repository.NewUserRepository(db)
 	productRepo := repository.NewProductRepository(db)
-	orderRepo   := repository.NewOrderRepository(db)
-	tokenRepo   := repository.NewTokenRepository(db)
-	cartRepo    := repository.NewCartRepository(db)
+	orderRepo := repository.NewOrderRepository(db)
+	tokenRepo := repository.NewTokenRepository(db)
+	cartRepo := repository.NewCartRepository(db)
 
 	svc := service.NewServices(
 		service.NewUserService(userRepo),
 		service.NewProductService(productRepo),
-		service.NewOrderService(orderRepo, productRepo),
-		service.NewTokenService(tokenRepo, userRepo, authMgr, cfg.JWT.RefreshTTL),
+		service.NewOrderService(db, orderRepo, productRepo),
+		service.NewTokenService(db, tokenRepo, userRepo, authMgr, cfg.JWT.RefreshTTL),
 		service.NewCartService(cartRepo, productRepo),
 	)
 

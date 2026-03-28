@@ -1,4 +1,4 @@
-package domain
+package models
 
 import "time"
 
@@ -23,9 +23,7 @@ type Category struct {
 	CreatedAt time.Time `db:"created_at"`
 }
 
-// ── Request DTOs ──────────────────────────────────────────────────────────────
-
-type CreateProductRequest struct {
+type CreateProduct struct {
 	CategoryID  int64   `json:"category_id"  binding:"required"`
 	Name        string  `json:"name"         binding:"required"`
 	Description string  `json:"description"`
@@ -34,7 +32,7 @@ type CreateProductRequest struct {
 	ImageURL    string  `json:"image_url"`
 }
 
-type UpdateProductRequest struct {
+type UpdateProduct struct {
 	Name        string  `json:"name"        binding:"required"`
 	Description string  `json:"description"`
 	Price       float64 `json:"price"       binding:"required,gt=0"`

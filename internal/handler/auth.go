@@ -4,15 +4,15 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/response"
 	"github.com/gin-gonic/gin"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/response"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 )
 
 // POST /api/v1/auth/register
 func (h *Handler) Register(c *gin.Context) {
-	var req domain.RegisterRequest
+	var req models.Register
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
@@ -31,12 +31,12 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	response.Created(c, domain.AuthResponse{User: user, Tokens: tokens})
+	response.Created(c, models.Auth{User: user, Tokens: tokens})
 }
 
 // POST /api/v1/auth/login
 func (h *Handler) Login(c *gin.Context) {
-	var req domain.LoginRequest
+	var req models.Login
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
@@ -54,7 +54,7 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	response.OK(c, domain.AuthResponse{User: user.ToResponse(), Tokens: tokens})
+	response.OK(c, models.Auth{User: user.ToResponse(), Tokens: tokens})
 }
 
 // POST /api/v1/auth/refresh

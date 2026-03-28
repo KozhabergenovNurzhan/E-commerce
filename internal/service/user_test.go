@@ -2,56 +2,57 @@ package service_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/domain"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/service"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/testutil"
-	"github.com/KozhabergenovNurzhan/E-commerce/pkg/apperrors"
 )
 
 func TestRegister(t *testing.T) {
 	tests := []struct {
 		name     string
-		req      *domain.RegisterRequest
-		createFn func(ctx context.Context, user *domain.User) error
-		wantErr  error
-		check    func(t *testing.T, resp *domain.UserResponse)
+		req      *models.Register
+		createFn func(ctx context.Context, user *models.UserRecord) error
+		wantCode int
+		check    func(t *testing.T, resp *models.User)
 	}{
 		{
 			name: "success",
-			req: &domain.RegisterRequest{
+			req: &models.Register{
 				Email:     "john@example.com",
 				Password:  "password123",
 				FirstName: "John",
 				LastName:  "Doe",
 			},
-			createFn: func(_ context.Context, user *domain.User) error {
+			createFn: func(_ context.Context, user *models.UserRecord) error {
 				user.ID = 1
 				return nil
 			},
-			check: func(t *testing.T, resp *domain.UserResponse) {
+			check: func(t *testing.T, resp *models.User) {
 				assert.Equal(t, int64(1), resp.ID)
 				assert.Equal(t, "john@example.com", resp.Email)
-				assert.Equal(t, domain.RoleCustomer, resp.Role)
+				assert.Equal(t, models.RoleCustomer, resp.Role)
 			},
 		},
 		{
 			name: "email already taken",
-			req: &domain.RegisterRequest{
+			req: &models.Register{
 				Email:     "existing@example.com",
 				Password:  "password123",
 				FirstName: "Jane",
 				LastName:  "Doe",
 			},
-			createFn: func(_ context.Context, _ *domain.User) error {
-				return apperrors.ErrConflict
+			createFn: func(_ context.Context, _ *models.UserRecord) error {
+				return apperrors.Conflict("email already taken", nil)
 			},
-			wantErr: apperrors.ErrConflict,
+			wantCode: http.StatusConflict,
 		},
 	}
 
@@ -60,8 +61,8 @@ func TestRegister(t *testing.T) {
 			repo := &testutil.MockUserRepo{CreateFn: tt.createFn}
 			resp, err := service.NewUserService(repo).Register(context.Background(), tt.req)
 
-			if tt.wantErr != nil {
-				assert.Equal(t, tt.wantErr, err)
+			if tt.wantCode != 0 {
+				assertCode(t, err, tt.wantCode)
 				return
 			}
 			require.NoError(t, err)
@@ -75,34 +76,34 @@ func TestLogin(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		req           *domain.LoginRequest
-		findByEmailFn func(ctx context.Context, email string) (*domain.User, error)
-		wantErr       error
+		req           *models.Login
+		findByEmailFn func(ctx context.Context, email string) (*models.UserRecord, error)
+		wantCode      int
 		wantUserID    int64
 	}{
 		{
 			name: "success",
-			req:  &domain.LoginRequest{Email: "john@example.com", Password: "password123"},
-			findByEmailFn: func(_ context.Context, email string) (*domain.User, error) {
-				return &domain.User{ID: 1, Email: email, PasswordHash: string(hash), Role: domain.RoleCustomer}, nil
+			req:  &models.Login{Email: "john@example.com", Password: "password123"},
+			findByEmailFn: func(_ context.Context, email string) (*models.UserRecord, error) {
+				return &models.UserRecord{ID: 1, Email: email, PasswordHash: string(hash), Role: models.RoleCustomer}, nil
 			},
 			wantUserID: 1,
 		},
 		{
 			name: "wrong password",
-			req:  &domain.LoginRequest{Email: "john@example.com", Password: "wrongpass"},
-			findByEmailFn: func(_ context.Context, email string) (*domain.User, error) {
-				return &domain.User{ID: 1, Email: email, PasswordHash: string(hash)}, nil
+			req:  &models.Login{Email: "john@example.com", Password: "wrongpass"},
+			findByEmailFn: func(_ context.Context, email string) (*models.UserRecord, error) {
+				return &models.UserRecord{ID: 1, Email: email, PasswordHash: string(hash)}, nil
 			},
-			wantErr: apperrors.ErrBadRequest,
+			wantCode: http.StatusBadRequest,
 		},
 		{
 			name: "user not found returns bad request to avoid enumeration",
-			req:  &domain.LoginRequest{Email: "nobody@example.com", Password: "password123"},
-			findByEmailFn: func(_ context.Context, _ string) (*domain.User, error) {
-				return nil, apperrors.ErrNotFound
+			req:  &models.Login{Email: "nobody@example.com", Password: "password123"},
+			findByEmailFn: func(_ context.Context, _ string) (*models.UserRecord, error) {
+				return nil, apperrors.NotFound("user not found", nil)
 			},
-			wantErr: apperrors.ErrBadRequest,
+			wantCode: http.StatusBadRequest,
 		},
 	}
 
@@ -111,8 +112,8 @@ func TestLogin(t *testing.T) {
 			repo := &testutil.MockUserRepo{FindByEmailFn: tt.findByEmailFn}
 			user, err := service.NewUserService(repo).Login(context.Background(), tt.req)
 
-			if tt.wantErr != nil {
-				assert.Equal(t, tt.wantErr, err)
+			if tt.wantCode != 0 {
+				assertCode(t, err, tt.wantCode)
 				return
 			}
 			require.NoError(t, err)
