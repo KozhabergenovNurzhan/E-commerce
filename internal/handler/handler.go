@@ -81,6 +81,15 @@ func (h *Handler) InitRoutes() *gin.Engine {
 			cart.PUT("/items/:productId", h.UpdateCartItem)
 			cart.DELETE("/items/:productId", h.RemoveFromCart)
 			cart.DELETE("", h.ClearCart)
+			cart.POST("/checkout", h.Checkout)
+		}
+
+		// Categories — write operations for admin only
+		categories := protected.Group("/categories")
+		{
+			categories.POST("", middleware.RequireRole(models.RoleAdmin), h.CreateCategory)
+			categories.PUT("/:id", middleware.RequireRole(models.RoleAdmin), h.UpdateCategory)
+			categories.DELETE("/:id", middleware.RequireRole(models.RoleAdmin), h.DeleteCategory)
 		}
 
 		// Seller dashboard

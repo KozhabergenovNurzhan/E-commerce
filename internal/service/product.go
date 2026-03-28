@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/utils"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
 )
@@ -93,4 +94,49 @@ func (s *ProductService) ListBySeller(ctx context.Context, sellerID int64, f *mo
 
 func (s *ProductService) ListCategories(ctx context.Context) ([]*models.Category, error) {
 	return s.repo.ListCategories(ctx)
+}
+
+func (s *ProductService) CreateCategory(ctx context.Context, req *models.CreateCategory) (*models.Category, error) {
+	c := &models.Category{
+		Name:      req.Name,
+		Slug:      req.Slug,
+		CreatedAt: utils.Now(),
+	}
+
+	if err := s.repo.CreateCategory(ctx, c); err != nil {
+		return nil, err
+	}
+
+	return c, nil
+}
+
+func (s *ProductService) UpdateCategory(ctx context.Context, id int64, req *models.UpdateCategory) (*models.Category, error) {
+	cats, err := s.repo.ListCategories(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var target *models.Category
+	for _, cat := range cats {
+		if cat.ID == id {
+			target = cat
+			break
+		}
+	}
+	if target == nil {
+		return nil, apperrors.NotFound("category not found", nil)
+	}
+
+	target.Name = req.Name
+	target.Slug = req.Slug
+
+	if err := s.repo.UpdateCategory(ctx, target); err != nil {
+		return nil, err
+	}
+
+	return target, nil
+}
+
+func (s *ProductService) DeleteCategory(ctx context.Context, id int64) error {
+	return s.repo.DeleteCategory(ctx, id)
 }

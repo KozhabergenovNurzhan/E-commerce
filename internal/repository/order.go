@@ -80,6 +80,32 @@ func (r *orderRepository) ListByUser(ctx context.Context, userID int64, limit, o
 	var total int
 	_ = r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM orders WHERE user_id = $1`, userID)
 
+	if len(orders) > 0 {
+		ids := make([]int64, len(orders))
+		for i, o := range orders {
+			ids[i] = o.ID
+		}
+
+		qItems, args, err := sqlx.In(`SELECT * FROM order_items WHERE order_id IN (?)`, ids)
+		if err != nil {
+			return nil, 0, apperrors.Internal("internal server error", err)
+		}
+		qItems = r.db.Rebind(qItems)
+
+		var items []models.OrderItem
+		if err := r.db.SelectContext(ctx, &items, qItems, args...); err != nil {
+			return nil, 0, apperrors.Internal("internal server error", err)
+		}
+
+		itemsByOrder := make(map[int64][]models.OrderItem, len(orders))
+		for _, item := range items {
+			itemsByOrder[item.OrderID] = append(itemsByOrder[item.OrderID], item)
+		}
+		for _, o := range orders {
+			o.Items = itemsByOrder[o.ID]
+		}
+	}
+
 	return orders, total, nil
 }
 

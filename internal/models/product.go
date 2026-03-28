@@ -40,6 +40,16 @@ type UpdateProduct struct {
 	ImageURL    string  `json:"image_url"`
 }
 
+type CreateCategory struct {
+	Name string `json:"name" binding:"required"`
+	Slug string `json:"slug" binding:"required"`
+}
+
+type UpdateCategory struct {
+	Name string `json:"name" binding:"required"`
+	Slug string `json:"slug" binding:"required"`
+}
+
 type ProductFilter struct {
 	Search     string   `form:"search"`
 	CategoryID *int64   `form:"category_id"`

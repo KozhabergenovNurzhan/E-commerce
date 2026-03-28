@@ -20,6 +20,9 @@ type ProductRepository interface {
 	List(ctx context.Context, f *models.ProductFilter) ([]*models.Product, int, error)
 	ListBySeller(ctx context.Context, sellerID int64, f *models.ProductFilter) ([]*models.Product, int, error)
 	ListCategories(ctx context.Context) ([]*models.Category, error)
+	CreateCategory(ctx context.Context, c *models.Category) error
+	UpdateCategory(ctx context.Context, c *models.Category) error
+	DeleteCategory(ctx context.Context, id int64) error
 }
 
 type productRepository struct {
@@ -190,4 +193,53 @@ func (r *productRepository) ListCategories(ctx context.Context) ([]*models.Categ
 	}
 
 	return cats, nil
+}
+
+func (r *productRepository) CreateCategory(ctx context.Context, c *models.Category) error {
+	const q = `
+		INSERT INTO categories (name, slug, created_at)
+		VALUES (:name, :slug, :created_at)
+		RETURNING id`
+
+	rows, err := r.db.NamedQueryContext(ctx, q, c)
+	if err != nil {
+		return apperrors.Internal("internal server error", err)
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		rows.Scan(&c.ID)
+	}
+
+	return nil
+}
+
+func (r *productRepository) UpdateCategory(ctx context.Context, c *models.Category) error {
+	const q = `UPDATE categories SET name = :name, slug = :slug WHERE id = :id`
+
+	result, err := r.db.NamedExecContext(ctx, q, c)
+	if err != nil {
+		return apperrors.Internal("internal server error", err)
+	}
+
+	if n, _ := result.RowsAffected(); n == 0 {
+		return apperrors.NotFound("category not found", nil)
+	}
+
+	return nil
+}
+
+func (r *productRepository) DeleteCategory(ctx context.Context, id int64) error {
+	const q = `DELETE FROM categories WHERE id = $1`
+
+	result, err := r.db.ExecContext(ctx, q, id)
+	if err != nil {
+		return apperrors.Internal("internal server error", err)
+	}
+
+	if n, _ := result.RowsAffected(); n == 0 {
+		return apperrors.NotFound("category not found", nil)
+	}
+
+	return nil
 }

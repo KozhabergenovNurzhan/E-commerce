@@ -79,6 +79,40 @@ func (h *Handler) RemoveFromCart(c *gin.Context) {
 	response.NoContent(c)
 }
 
+// POST /api/v1/cart/checkout
+func (h *Handler) Checkout(c *gin.Context) {
+	userID := middleware.MustUserID(c)
+	ctx := c.Request.Context()
+
+	cart, err := h.services.Cart.GetCart(ctx, userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if len(cart.Items) == 0 {
+		response.BadRequest(c, "cart is empty")
+		return
+	}
+
+	items := make([]models.CreateOrderItem, 0, len(cart.Items))
+	for _, item := range cart.Items {
+		items = append(items, models.CreateOrderItem{
+			ProductID: item.Product.ID,
+			Quantity:  item.Quantity,
+		})
+	}
+
+	order, err := h.services.Order.Create(ctx, userID, &models.CreateOrder{Items: items})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	_ = h.services.Cart.Clear(ctx, userID)
+
+	response.Created(c, order)
+}
+
 // DELETE /api/v1/cart
 func (h *Handler) ClearCart(c *gin.Context) {
 	userID := middleware.MustUserID(c)

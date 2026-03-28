@@ -48,6 +48,9 @@ type MockProductRepo struct {
 	ListFn           func(ctx context.Context, f *models.ProductFilter) ([]*models.Product, int, error)
 	ListBySellerFn   func(ctx context.Context, sellerID int64, f *models.ProductFilter) ([]*models.Product, int, error)
 	ListCategoriesFn func(ctx context.Context) ([]*models.Category, error)
+	CreateCategoryFn func(ctx context.Context, c *models.Category) error
+	UpdateCategoryFn func(ctx context.Context, c *models.Category) error
+	DeleteCategoryFn func(ctx context.Context, id int64) error
 }
 
 func (m *MockProductRepo) Create(ctx context.Context, p *models.Product) error {
@@ -70,6 +73,15 @@ func (m *MockProductRepo) ListBySeller(ctx context.Context, sellerID int64, f *m
 }
 func (m *MockProductRepo) ListCategories(ctx context.Context) ([]*models.Category, error) {
 	return m.ListCategoriesFn(ctx)
+}
+func (m *MockProductRepo) CreateCategory(ctx context.Context, c *models.Category) error {
+	return m.CreateCategoryFn(ctx, c)
+}
+func (m *MockProductRepo) UpdateCategory(ctx context.Context, c *models.Category) error {
+	return m.UpdateCategoryFn(ctx, c)
+}
+func (m *MockProductRepo) DeleteCategory(ctx context.Context, id int64) error {
+	return m.DeleteCategoryFn(ctx, id)
 }
 
 // ── OrderRepository mock ──────────────────────────────────────────────────────
