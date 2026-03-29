@@ -8,11 +8,12 @@ import (
 )
 
 type Config struct {
-	Port     string
-	DB       DBConfig
-	JWT      JWTConfig
-	Redis    RedisConfig
-	LogLevel slog.Level
+	Port      string
+	DB        DBConfig
+	JWT       JWTConfig
+	Redis     RedisConfig
+	LogLevel  slog.Level
+	LogFormat string // "text" | "json"
 }
 
 type DBConfig struct {
@@ -73,7 +74,8 @@ func Load() *Config {
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       0,
 		},
-		LogLevel: parseLogLevel(getEnv("LOG_LEVEL", "info")),
+		LogLevel:  parseLogLevel(getEnv("LOG_LEVEL", "info")),
+		LogFormat: getEnv("LOG_FORMAT", "text"),
 	}
 }
 

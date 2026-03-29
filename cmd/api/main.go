@@ -30,7 +30,7 @@ import (
 func main() {
 	cfg := config.Load()
 
-	log := logger.New("ecommerce", cfg.LogLevel)
+	log := logger.New("ecommerce", cfg.LogLevel, cfg.LogFormat)
 	slog.SetDefault(log)
 
 	router, err := buildApp(cfg, log)
