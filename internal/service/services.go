@@ -6,6 +6,8 @@ type Services struct {
 	Order   *OrderService
 	Token   *TokenService
 	Cart    *CartService
+	Review  *ReviewService
+	Address *AddressService
 }
 
 func NewServices(
@@ -14,6 +16,8 @@ func NewServices(
 	order *OrderService,
 	token *TokenService,
 	cart *CartService,
+	review *ReviewService,
+	address *AddressService,
 ) *Services {
 	return &Services{
 		User:    user,
@@ -21,5 +25,7 @@ func NewServices(
 		Order:   order,
 		Token:   token,
 		Cart:    cart,
+		Review:  review,
+		Address: address,
 	}
 }

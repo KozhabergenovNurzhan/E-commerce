@@ -78,6 +78,8 @@ func buildApp(cfg *config.Config, log *slog.Logger) (*gin.Engine, error) {
 	orderRepo := repository.NewOrderRepository(db)
 	tokenRepo := repository.NewTokenRepository(db)
 	cartRepo := repository.NewCartRepository(db)
+	reviewRepo := repository.NewReviewRepository(db)
+	addressRepo := repository.NewAddressRepository(db)
 
 	redisClient := initRedisClient(cfg)
 
@@ -94,6 +96,8 @@ func buildApp(cfg *config.Config, log *slog.Logger) (*gin.Engine, error) {
 		service.NewOrderService(db, orderRepo, productRepo),
 		service.NewTokenService(db, tokenRepo, userRepo, authMgr, cfg.JWT.RefreshTTL),
 		service.NewCartService(cartRepo, productRepo),
+		service.NewReviewService(reviewRepo, productRepo),
+		service.NewAddressService(addressRepo, db),
 	)
 
 	h := handler.NewHandler(svc, authMgr, log, db, idempotencyStore)

@@ -101,7 +101,28 @@ func (h *Handler) InitRoutes() *gin.Engine {
 			orders.PATCH("/:id/cancel", h.CancelOrder)
 			orders.PATCH("/:id/status", middleware.RequireRole(models.RoleAdmin, models.RoleManager), h.UpdateOrderStatus)
 		}
+
+		// Addresses
+		addresses := protected.Group("/addresses")
+		{
+			addresses.GET("", h.ListAddresses)
+			addresses.POST("", h.CreateAddress)
+			addresses.PUT("/:id", h.UpdateAddress)
+			addresses.DELETE("/:id", h.DeleteAddress)
+			addresses.PATCH("/:id/default", h.SetDefaultAddress)
+		}
+
+		// Reviews — write operations protected, read is public (registered below)
+		productReviews := protected.Group("/products/:id/reviews")
+		{
+			productReviews.POST("", h.CreateReview)
+			productReviews.PUT("/:reviewId", h.UpdateReview)
+			productReviews.DELETE("/:reviewId", h.DeleteReview)
+		}
 	}
+
+	// Public: product reviews
+	api.GET("/products/:id/reviews", h.ListReviews)
 
 	r.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "route not found"})
