@@ -11,6 +11,7 @@ type Config struct {
 	Port     string
 	DB       DBConfig
 	JWT      JWTConfig
+	Redis    RedisConfig
 	LogLevel slog.Level
 }
 
@@ -21,6 +22,18 @@ type DBConfig struct {
 	Password string
 	Name     string
 	SSLMode  string
+}
+
+type JWTConfig struct {
+	Secret     string
+	AccessTTL  time.Duration
+	RefreshTTL time.Duration
+}
+
+type RedisConfig struct {
+	Addr     string
+	Password string
+	DB       int
 }
 
 // DSN returns a key-value connection string used by pgx stdlib driver.
@@ -39,12 +52,6 @@ func (d DBConfig) MigrateURL() string {
 	)
 }
 
-type JWTConfig struct {
-	Secret     string
-	AccessTTL  time.Duration
-	RefreshTTL time.Duration
-}
-
 func Load() *Config {
 	return &Config{
 		Port: getEnv("PORT", "8080"),
@@ -60,6 +67,11 @@ func Load() *Config {
 			Secret:     getEnv("JWT_SECRET", "change-me-in-production"),
 			AccessTTL:  parseDuration(getEnv("JWT_ACCESS_TTL", "15m")),
 			RefreshTTL: parseDuration(getEnv("JWT_REFRESH_TTL", "168h")), // 7 days
+		},
+		Redis: RedisConfig{
+			Addr:     getEnv("REDIS_ADDR", "localhost:6379"),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       0,
 		},
 		LogLevel: parseLogLevel(getEnv("LOG_LEVEL", "info")),
 	}

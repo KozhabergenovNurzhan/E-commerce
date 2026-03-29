@@ -16,8 +16,10 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/auth"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/cache"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/config"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/handler"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
@@ -77,15 +79,24 @@ func buildApp(cfg *config.Config, log *slog.Logger) (*gin.Engine, error) {
 	tokenRepo := repository.NewTokenRepository(db)
 	cartRepo := repository.NewCartRepository(db)
 
+	redisClient := initRedisClient(cfg)
+
+	var productCache *cache.RedisCache
+	var idempotencyStore *cache.IdempotencyStore
+	if redisClient != nil {
+		productCache = cache.NewProductCache(redisClient)
+		idempotencyStore = cache.NewIdempotencyStore(redisClient, 24*time.Hour)
+	}
+
 	svc := service.NewServices(
 		service.NewUserService(userRepo),
-		service.NewProductService(productRepo),
+		service.NewProductService(productRepo, productCache),
 		service.NewOrderService(db, orderRepo, productRepo),
 		service.NewTokenService(db, tokenRepo, userRepo, authMgr, cfg.JWT.RefreshTTL),
 		service.NewCartService(cartRepo, productRepo),
 	)
 
-	h := handler.NewHandler(svc, authMgr, log, db)
+	h := handler.NewHandler(svc, authMgr, log, db, idempotencyStore)
 	return h.InitRoutes(), nil
 }
 
@@ -114,4 +125,24 @@ func runMigrations(cfg config.DBConfig, log *slog.Logger) error {
 	}
 	log.Info("migrations applied")
 	return nil
+}
+
+func initRedisClient(cfg *config.Config) *redis.Client {
+	client := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if err := client.Ping(ctx).Err(); err != nil {
+		slog.Warn("redis is unavailable, continuing without cache", "error", err.Error())
+		_ = client.Close()
+		return nil
+	}
+
+	slog.Info("Redis connected successfully")
+	return client
 }

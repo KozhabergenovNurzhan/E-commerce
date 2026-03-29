@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"fmt"
 
 	"github.com/jmoiron/sqlx"
 
@@ -21,50 +24,85 @@ func NewOrderService(db *sqlx.DB, orderRepo repository.OrderRepository, productR
 	return &OrderService{db: db, orderRepo: orderRepo, productRepo: productRepo}
 }
 
+// allowedTransitions defines the valid order status state machine.
+var allowedTransitions = map[models.OrderStatus]models.OrderStatus{
+	models.OrderStatusPending:   models.OrderStatusConfirmed,
+	models.OrderStatusConfirmed: models.OrderStatusShipping,
+	models.OrderStatusShipping:  models.OrderStatusDelivered,
+}
+
 func (s *OrderService) Create(ctx context.Context, userID int64, req *models.CreateOrder) (*models.Order, error) {
-	var total float64
-	items := make([]models.OrderItem, 0, len(req.Items))
-
-	for _, r := range req.Items {
-		product, err := s.productRepo.FindByID(ctx, r.ProductID)
-		if err != nil {
-			return nil, err
-		}
-		if product.Stock < r.Quantity {
-			return nil, apperrors.BadRequest("insufficient stock", nil)
-		}
-		total += product.Price * float64(r.Quantity)
-
-		items = append(items, models.OrderItem{
-			ProductID: r.ProductID,
-			Quantity:  r.Quantity,
-			UnitPrice: product.Price,
-		})
-	}
-
 	now := utils.Now()
 	order := &models.Order{
-		UserID:     userID,
-		Status:     models.OrderStatusPending,
-		TotalPrice: total,
-		CreatedAt:  now,
-		UpdatedAt:  now,
-		Items:      items,
+		UserID:    userID,
+		Status:    models.OrderStatusPending,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	if s.db == nil {
-		// test path: no real DB, delegate to repo mock
+		// test path: validate via repo mock (FindByID already filters is_active=true)
+		var total float64
+		items := make([]models.OrderItem, 0, len(req.Items))
+		for _, r := range req.Items {
+			product, err := s.productRepo.FindByID(ctx, r.ProductID)
+			if err != nil {
+				return nil, err
+			}
+			if product.Stock < r.Quantity {
+				return nil, apperrors.BadRequest("insufficient stock", nil)
+			}
+			total += product.Price * float64(r.Quantity)
+			items = append(items, models.OrderItem{
+				ProductID: r.ProductID,
+				Quantity:  r.Quantity,
+				UnitPrice: product.Price,
+			})
+		}
+		order.TotalPrice = total
+		order.Items = items
 		if err := s.orderRepo.Create(ctx, order); err != nil {
 			return nil, err
 		}
 		return order, nil
 	}
 
+	// Production path: validate + decrement stock atomically with FOR UPDATE locks.
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, apperrors.Internal("internal server error", err)
 	}
 	defer tx.Rollback()
+
+	type productRow struct {
+		Price float64 `db:"price"`
+		Stock int     `db:"stock"`
+	}
+	const qProduct = `SELECT price, stock FROM products WHERE id = $1 AND is_active = true FOR UPDATE`
+
+	var total float64
+	items := make([]models.OrderItem, 0, len(req.Items))
+	for _, r := range req.Items {
+		var p productRow
+		if err := tx.GetContext(ctx, &p, qProduct, r.ProductID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, apperrors.BadRequest("product not found or unavailable", nil)
+			}
+			return nil, apperrors.Internal("internal server error", err)
+		}
+		if p.Stock < r.Quantity {
+			return nil, apperrors.BadRequest("insufficient stock", nil)
+		}
+		total += p.Price * float64(r.Quantity)
+		items = append(items, models.OrderItem{
+			ProductID: r.ProductID,
+			Quantity:  r.Quantity,
+			UnitPrice: p.Price,
+		})
+	}
+
+	order.TotalPrice = total
+	order.Items = items
 
 	const qOrder = `
 		INSERT INTO orders (user_id, status, total_price, created_at, updated_at)
@@ -85,7 +123,6 @@ func (s *OrderService) Create(ctx context.Context, userID int64, req *models.Cre
 		RETURNING id`
 	for i := range order.Items {
 		order.Items[i].OrderID = order.ID
-
 		rows, err := sqlx.NamedQueryContext(ctx, tx, qItem, order.Items[i])
 		if err != nil {
 			return nil, apperrors.Internal("internal server error", err)
@@ -120,14 +157,24 @@ func (s *OrderService) ListByUser(ctx context.Context, userID int64, page, limit
 	if limit < 1 {
 		limit = 20
 	}
+	if limit > 100 {
+		limit = 100
+	}
 	return s.orderRepo.ListByUser(ctx, userID, limit, (page-1)*limit)
 }
 
-func (s *OrderService) UpdateStatus(ctx context.Context, id int64, status models.OrderStatus) error {
-	if _, err := s.orderRepo.FindByID(ctx, id); err != nil {
+func (s *OrderService) UpdateStatus(ctx context.Context, id int64, newStatus models.OrderStatus) error {
+	order, err := s.orderRepo.FindByID(ctx, id)
+	if err != nil {
 		return err
 	}
-	return s.orderRepo.UpdateStatus(ctx, id, status)
+	next, ok := allowedTransitions[order.Status]
+	if !ok || next != newStatus {
+		return apperrors.BadRequest(
+			fmt.Sprintf("cannot transition from %s to %s", order.Status, newStatus), nil,
+		)
+	}
+	return s.orderRepo.UpdateStatus(ctx, id, newStatus)
 }
 
 func (s *OrderService) Cancel(ctx context.Context, id int64) error {

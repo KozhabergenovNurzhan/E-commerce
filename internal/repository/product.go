@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/jmoiron/sqlx"
@@ -41,6 +42,9 @@ func (r *productRepository) Create(ctx context.Context, p *models.Product) error
 
 	rows, err := r.db.NamedQueryContext(ctx, q, p)
 	if err != nil {
+		if strings.Contains(err.Error(), "23503") {
+			return apperrors.BadRequest("invalid category", nil)
+		}
 		return apperrors.Internal("internal server error", err)
 	}
 	defer rows.Close()

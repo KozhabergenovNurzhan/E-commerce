@@ -32,7 +32,7 @@ func TestProductCreate(t *testing.T) {
 		},
 	}
 
-	p, err := service.NewProductService(productRepo).Create(context.Background(), &sellerID, req)
+	p, err := service.NewProductService(productRepo, nil).Create(context.Background(), &sellerID, req)
 
 	require.NoError(t, err)
 	assert.Equal(t, int64(7), p.ID)
@@ -52,7 +52,7 @@ func TestProductCreate_RepoError(t *testing.T) {
 		},
 	}
 
-	_, err := service.NewProductService(productRepo).
+	_, err := service.NewProductService(productRepo, nil).
 		Create(context.Background(), nil, &models.CreateProduct{Name: "x", Price: 1, CategoryID: 1})
 
 	assertCode(t, err, http.StatusInternalServerError)
@@ -82,7 +82,7 @@ func TestProductGetByID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			productRepo := &testutil.MockProductRepo{FindByIDFn: tt.stub}
-			p, err := service.NewProductService(productRepo).GetByID(context.Background(), 1)
+			p, err := service.NewProductService(productRepo, nil).GetByID(context.Background(), 1)
 			if tt.wantCode != 0 {
 				assertCode(t, err, tt.wantCode)
 				return
@@ -135,7 +135,7 @@ func TestProductUpdate(t *testing.T) {
 				UpdateFn:   tt.updateFn,
 			}
 			req := &models.UpdateProduct{Name: "New", Price: 1.0}
-			p, err := service.NewProductService(productRepo).Update(context.Background(), 1, req)
+			p, err := service.NewProductService(productRepo, nil).Update(context.Background(), 1, req)
 
 			if tt.wantCode != 0 {
 				assertCode(t, err, tt.wantCode)
@@ -170,7 +170,7 @@ func TestProductDelete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			productRepo := &testutil.MockProductRepo{DeleteFn: tt.stub}
-			err := service.NewProductService(productRepo).Delete(context.Background(), 1)
+			err := service.NewProductService(productRepo, nil).Delete(context.Background(), 1)
 			if tt.wantCode != 0 {
 				assertCode(t, err, tt.wantCode)
 			} else {
@@ -203,7 +203,7 @@ func TestProductList_PaginationDefaults(t *testing.T) {
 				},
 			}
 			f := tt.input
-			_, _, err := service.NewProductService(productRepo).List(context.Background(), &f)
+			_, _, err := service.NewProductService(productRepo, nil).List(context.Background(), &f)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantPage, capturedFilter.Page)
 			assert.Equal(t, tt.wantLimit, capturedFilter.Limit)
@@ -232,7 +232,7 @@ func TestProductListBySeller_PaginationDefaults(t *testing.T) {
 				},
 			}
 			f := tt.input
-			_, _, err := service.NewProductService(productRepo).ListBySeller(context.Background(), 1, &f)
+			_, _, err := service.NewProductService(productRepo, nil).ListBySeller(context.Background(), 1, &f)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantPage, capturedFilter.Page)
 			assert.Equal(t, tt.wantLimit, capturedFilter.Limit)
@@ -251,7 +251,7 @@ func TestProductListCategories(t *testing.T) {
 		},
 	}
 
-	result, err := service.NewProductService(productRepo).ListCategories(context.Background())
+	result, err := service.NewProductService(productRepo, nil).ListCategories(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, cats, result)
 }
@@ -263,6 +263,6 @@ func TestProductListCategories_Error(t *testing.T) {
 		},
 	}
 
-	_, err := service.NewProductService(productRepo).ListCategories(context.Background())
+	_, err := service.NewProductService(productRepo, nil).ListCategories(context.Background())
 	assertCode(t, err, http.StatusInternalServerError)
 }

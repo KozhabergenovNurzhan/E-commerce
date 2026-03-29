@@ -20,6 +20,9 @@ func (h *Handler) ListUsers(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
+	if q.Limit > 100 {
+		q.Limit = 100
+	}
 
 	users, total, err := h.services.User.List(c.Request.Context(), q.Page, q.Limit)
 	if err != nil {

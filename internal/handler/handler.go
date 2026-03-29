@@ -10,20 +10,22 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/auth"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/cache"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/middleware"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/service"
 )
 
 type Handler struct {
-	services *service.Services
-	authMgr  auth.Manager
-	logger   *slog.Logger
-	db       *sqlx.DB
+	services        *service.Services
+	authMgr         auth.Manager
+	logger          *slog.Logger
+	db              *sqlx.DB
+	idempotencyStore *cache.IdempotencyStore
 }
 
-func NewHandler(services *service.Services, authMgr auth.Manager, logger *slog.Logger, db *sqlx.DB) *Handler {
-	return &Handler{services: services, authMgr: authMgr, logger: logger, db: db}
+func NewHandler(services *service.Services, authMgr auth.Manager, logger *slog.Logger, db *sqlx.DB, idempotencyStore *cache.IdempotencyStore) *Handler {
+	return &Handler{services: services, authMgr: authMgr, logger: logger, db: db, idempotencyStore: idempotencyStore}
 }
 
 func (h *Handler) InitRoutes() *gin.Engine {
@@ -81,7 +83,7 @@ func (h *Handler) InitRoutes() *gin.Engine {
 			cart.PUT("/items/:productId", h.UpdateCartItem)
 			cart.DELETE("/items/:productId", h.RemoveFromCart)
 			cart.DELETE("", h.ClearCart)
-			cart.POST("/checkout", h.Checkout)
+			cart.POST("/checkout", middleware.Idempotency(h.idempotencyStore), h.Checkout)
 		}
 
 		// Categories — write operations for admin only
@@ -98,7 +100,7 @@ func (h *Handler) InitRoutes() *gin.Engine {
 		// Orders
 		orders := protected.Group("/orders")
 		{
-			orders.POST("", h.CreateOrder)
+			orders.POST("", middleware.Idempotency(h.idempotencyStore), h.CreateOrder)
 			orders.GET("", h.ListOrders)
 			orders.GET("/:id", h.GetOrderByID)
 			orders.PATCH("/:id/cancel", h.CancelOrder)

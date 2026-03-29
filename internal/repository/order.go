@@ -78,7 +78,9 @@ func (r *orderRepository) ListByUser(ctx context.Context, userID int64, limit, o
 	}
 
 	var total int
-	_ = r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM orders WHERE user_id = $1`, userID)
+	if err := r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM orders WHERE user_id = $1`, userID); err != nil {
+		return nil, 0, apperrors.Internal("internal server error", err)
+	}
 
 	if len(orders) > 0 {
 		ids := make([]int64, len(orders))

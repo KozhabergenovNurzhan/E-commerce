@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"strconv"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/response"
@@ -108,7 +109,9 @@ func (h *Handler) Checkout(c *gin.Context) {
 		return
 	}
 
-	_ = h.services.Cart.Clear(ctx, userID)
+	if err := h.services.Cart.Clear(ctx, userID); err != nil {
+		h.logger.Warn("failed to clear cart after checkout", slog.String("err", err.Error()))
+	}
 
 	response.Created(c, order)
 }

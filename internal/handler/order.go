@@ -42,6 +42,9 @@ func (h *Handler) ListOrders(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
+	if q.Limit > 100 {
+		q.Limit = 100
+	}
 
 	orders, total, err := h.services.Order.ListByUser(c.Request.Context(), userID, q.Page, q.Limit)
 	if err != nil {

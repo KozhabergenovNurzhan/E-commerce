@@ -25,29 +25,29 @@ type Category struct {
 
 type CreateProduct struct {
 	CategoryID  int64   `json:"category_id"  binding:"required"`
-	Name        string  `json:"name"         binding:"required"`
-	Description string  `json:"description"`
+	Name        string  `json:"name"         binding:"required,max=255"`
+	Description string  `json:"description"  binding:"max=2000"`
 	Price       float64 `json:"price"        binding:"required,gt=0"`
 	Stock       int     `json:"stock"        binding:"gte=0"`
-	ImageURL    string  `json:"image_url"`
+	ImageURL    string  `json:"image_url"    binding:"max=500"`
 }
 
 type UpdateProduct struct {
-	Name        string  `json:"name"        binding:"required"`
-	Description string  `json:"description"`
+	Name        string  `json:"name"        binding:"required,max=255"`
+	Description string  `json:"description" binding:"max=2000"`
 	Price       float64 `json:"price"       binding:"required,gt=0"`
 	Stock       int     `json:"stock"       binding:"gte=0"`
-	ImageURL    string  `json:"image_url"`
+	ImageURL    string  `json:"image_url"   binding:"max=500"`
 }
 
 type CreateCategory struct {
-	Name string `json:"name" binding:"required"`
-	Slug string `json:"slug" binding:"required"`
+	Name string `json:"name" binding:"required,max=100"`
+	Slug string `json:"slug" binding:"required,max=100"`
 }
 
 type UpdateCategory struct {
-	Name string `json:"name" binding:"required"`
-	Slug string `json:"slug" binding:"required"`
+	Name string `json:"name" binding:"required,max=100"`
+	Slug string `json:"slug" binding:"required,max=100"`
 }
 
 type ProductFilter struct {

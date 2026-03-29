@@ -124,7 +124,9 @@ func (r *userRepository) List(ctx context.Context, limit, offset int) ([]*models
 	}
 
 	var total int
-	_ = r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM users WHERE is_active = true`)
+	if err := r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM users WHERE is_active = true`); err != nil {
+		return nil, 0, apperrors.Internal("internal server error", err)
+	}
 
 	return users, total, nil
 }

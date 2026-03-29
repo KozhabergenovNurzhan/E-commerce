@@ -19,6 +19,11 @@ func (h *Handler) ListProducts(c *gin.Context) {
 		return
 	}
 
+	if f.MinPrice != nil && f.MaxPrice != nil && *f.MinPrice > *f.MaxPrice {
+		response.BadRequest(c, "min_price cannot be greater than max_price")
+		return
+	}
+
 	products, total, err := h.services.Product.List(c.Request.Context(), &f)
 	if err != nil {
 		response.Error(c, err)
