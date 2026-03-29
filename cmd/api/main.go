@@ -123,11 +123,13 @@ func runMigrations(cfg config.DBConfig, log *slog.Logger) error {
 		log.Error("failed to init migrations", slog.String("err", err.Error()))
 		return err
 	}
+
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 		log.Error("migration failed", slog.String("err", err.Error()))
 		return err
 	}
 	log.Info("migrations applied")
+
 	return nil
 }
 
