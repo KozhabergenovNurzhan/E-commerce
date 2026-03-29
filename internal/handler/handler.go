@@ -3,7 +3,6 @@ package handler
 import (
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,10 +16,10 @@ import (
 )
 
 type Handler struct {
-	services        *service.Services
-	authMgr         auth.Manager
-	logger          *slog.Logger
-	db              *sqlx.DB
+	services         *service.Services
+	authMgr          auth.Manager
+	logger           *slog.Logger
+	db               *sqlx.DB
 	idempotencyStore *cache.IdempotencyStore
 }
 
@@ -29,10 +28,6 @@ func NewHandler(services *service.Services, authMgr auth.Manager, logger *slog.L
 }
 
 func (h *Handler) InitRoutes() *gin.Engine {
-	if os.Getenv("GIN_MODE") == "" {
-		gin.SetMode(gin.DebugMode)
-	}
-
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(h.requestLogger())
@@ -90,7 +85,7 @@ func (h *Handler) InitRoutes() *gin.Engine {
 		categories := protected.Group("/categories")
 		{
 			categories.POST("", middleware.RequireRole(models.RoleAdmin), h.CreateCategory)
-			categories.PUT("/:id", middleware.RequireRole(models.RoleAdmin), h.UpdateCategory)
+			categories.PUT("/:id", middleware.RequireRole(models.RoleAdmin, models.RoleManager), h.UpdateCategory)
 			categories.DELETE("/:id", middleware.RequireRole(models.RoleAdmin), h.DeleteCategory)
 		}
 
