@@ -1,17 +1,17 @@
 # E-commerce REST API
 
-A production-ready e-commerce backend built with Go, Gin, PostgreSQL, and JWT authentication.
+A production-ready e-commerce backend built with Go, Gin, PostgreSQL, Redis, and JWT authentication.
 
 ## Tech Stack
 
 - **Go** — language
 - **Gin** — HTTP framework
-- **PostgreSQL 16** — database
-- **sqlx + pgx** — database driver and query layer
+- **PostgreSQL 16** — primary database (sqlx + pgx)
+- **Redis 7** — caching (products, categories) and idempotency
 - **golang-migrate** — SQL migrations (auto-applied on startup)
 - **JWT (HS256)** — access tokens (15m) + refresh tokens (7d, rotation)
 - **bcrypt** — password hashing
-- **slog** — structured JSON logging
+- **slog** — structured logging (text for terminal, JSON for Grafana/Prometheus)
 - **Docker + docker-compose** — containerized development
 
 ## Getting Started
@@ -22,13 +22,13 @@ A production-ready e-commerce backend built with Go, Gin, PostgreSQL, and JWT au
 docker-compose up --build
 ```
 
-App starts on `http://localhost:8080`. Migrations run automatically.
+App starts on `http://localhost:8080`. PostgreSQL, Redis and migrations run automatically.
 
 ### Run locally
 
 ```bash
-# 1. Start only the database
-docker-compose up -d postgres
+# 1. Start database and cache
+docker-compose up -d postgres redis
 
 # 2. Copy env and run
 cp .env.example .env
@@ -46,6 +46,9 @@ go test ./...
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `8080` | HTTP port |
+| `GIN_MODE` | `debug` | Gin mode (`debug` / `release`) |
+| `LOG_LEVEL` | `info` | Log level (`debug` / `info` / `warn` / `error`) |
+| `LOG_FORMAT` | `text` | Log format (`text` for terminal, `json` for Grafana) |
 | `DB_HOST` | `localhost` | PostgreSQL host |
 | `DB_PORT` | `5432` | PostgreSQL port |
 | `DB_USER` | `postgres` | Database user |
@@ -55,9 +58,12 @@ go test ./...
 | `JWT_SECRET` | `change-me-in-production` | HMAC signing secret |
 | `JWT_ACCESS_TTL` | `15m` | Access token lifetime |
 | `JWT_REFRESH_TTL` | `168h` | Refresh token lifetime (7 days) |
-| `LOG_LEVEL` | `info` | Log level (debug/info/warn/error) |
+| `REDIS_ADDR` | `localhost:6379` | Redis address |
+| `REDIS_PASSWORD` | _(empty)_ | Redis password |
 
 ## API
+
+Full Postman guide: [`docs/postman-guide.md`](docs/postman-guide.md)
 
 ### Auth
 
@@ -72,7 +78,7 @@ go test ./...
 
 | Method | Path | Access | Description |
 |--------|------|--------|-------------|
-| GET | `/api/v1/products` | Public | List products (filterable) |
+| GET | `/api/v1/products` | Public | List products (search, filter by category, price) |
 | GET | `/api/v1/products/:id` | Public | Get product by ID |
 | POST | `/api/v1/products` | Admin, Seller | Create product |
 | PUT | `/api/v1/products/:id` | Admin, Seller | Update product |
@@ -84,7 +90,7 @@ go test ./...
 |--------|------|--------|-------------|
 | GET | `/api/v1/categories` | Public | List all categories |
 | POST | `/api/v1/categories` | Admin | Create category |
-| PUT | `/api/v1/categories/:id` | Admin | Update category |
+| PUT | `/api/v1/categories/:id` | Admin, Manager | Update category |
 | DELETE | `/api/v1/categories/:id` | Admin | Delete category |
 
 ### Cart
@@ -103,7 +109,7 @@ go test ./...
 | Method | Path | Access | Description |
 |--------|------|--------|-------------|
 | POST | `/api/v1/orders` | Auth | Create order directly |
-| GET | `/api/v1/orders` | Auth | List own orders (paginated, with items) |
+| GET | `/api/v1/orders` | Auth | List own orders (paginated) |
 | GET | `/api/v1/orders/:id` | Auth | Get order by ID |
 | PATCH | `/api/v1/orders/:id/cancel` | Auth | Cancel pending order |
 | PATCH | `/api/v1/orders/:id/status` | Admin, Manager | Update order status |
@@ -114,7 +120,7 @@ go test ./...
 |--------|------|--------|-------------|
 | GET | `/api/v1/users` | Admin | List all users |
 | GET | `/api/v1/users/:id` | Auth | Get user by ID |
-| PUT | `/api/v1/users/:id` | Auth | Update profile |
+| PUT | `/api/v1/users/:id` | Auth | Update own profile |
 | DELETE | `/api/v1/users/:id` | Admin | Soft-delete user |
 
 ### Seller
@@ -127,8 +133,8 @@ go test ./...
 
 | Role | Capabilities |
 |------|-------------|
-| `customer` | Own profile, own orders, cart |
-| `manager` | Update order status |
+| `customer` | Own profile, cart, own orders |
+| `manager` | Update order status, update categories |
 | `seller` | Create and manage own products |
 | `admin` | Full access |
 
@@ -141,19 +147,40 @@ Authorization: Bearer <access_token>
 
 On expiry, call `POST /api/v1/auth/refresh` with `{"refresh_token": "..."}` to get a new pair. The old token is revoked immediately (rotation).
 
+## Idempotency
+
+`POST /api/v1/orders` and `POST /api/v1/cart/checkout` support idempotent requests via the `Idempotency-Key` header. Duplicate requests with the same key return the cached response without re-processing.
+
+```
+Idempotency-Key: <any-unique-string>
+```
+
+Responses are cached in Redis for 24 hours, scoped per user.
+
+## Order Status Flow
+
+```
+pending → confirmed → shipping → delivered
+pending → cancelled
+```
+
+Only forward transitions are allowed. Cancellation is only possible from `pending`.
+
 ## Project Structure
 
 ```
 cmd/api/             # Entry point — wires all dependencies
+docs/                # Postman guide and API documentation
 internal/
   auth/              # JWT manager (sign / validate)
+  cache/             # Redis: product cache + idempotency store
   config/            # Environment variable loading
   handler/           # Gin HTTP handlers and router
-  middleware/        # JWT auth and role enforcement
+  middleware/        # JWT auth, role enforcement, idempotency
   models/            # Entities and DTOs
   pkg/
     apperrors/       # Domain error types with HTTP status codes
-    logger/          # slog structured logging setup
+    logger/          # slog setup (text / json)
     response/        # JSON response helpers
     utils/           # Shared utilities
   repository/        # PostgreSQL data access (sqlx)
