@@ -36,8 +36,8 @@ func NewProductRepository(db *sqlx.DB) ProductRepository {
 
 func (r *productRepository) Create(ctx context.Context, p *models.Product) error {
 	const q = `
-		INSERT INTO products (category_id, seller_id, name, description, price, stock, image_url, is_active, created_at, updated_at)
-		VALUES (:category_id, :seller_id, :name, :description, :price, :stock, :image_url, :is_active, :created_at, :updated_at)
+		INSERT INTO products (category_id, seller_id, name, description, price, stock, image_url, created_at, updated_at)
+		VALUES (:category_id, :seller_id, :name, :description, :price, :stock, :image_url, :created_at, :updated_at)
 		RETURNING id`
 
 	rows, err := r.db.NamedQueryContext(ctx, q, p)
@@ -59,7 +59,7 @@ func (r *productRepository) Create(ctx context.Context, p *models.Product) error
 func (r *productRepository) FindByID(ctx context.Context, id int64) (*models.Product, error) {
 	var p models.Product
 
-	const q = `SELECT * FROM products WHERE id = $1 AND is_active = true`
+	const q = `SELECT * FROM products WHERE id = $1 AND deleted_at IS NULL`
 
 	if err := r.db.GetContext(ctx, &p, q, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -76,7 +76,7 @@ func (r *productRepository) Update(ctx context.Context, p *models.Product) error
 		UPDATE products
 		SET name = :name, description = :description, price = :price,
 		    stock = :stock, image_url = :image_url, updated_at = :updated_at
-		WHERE id = :id AND is_active = true`
+		WHERE id = :id AND deleted_at IS NULL`
 
 	result, err := r.db.NamedExecContext(ctx, q, p)
 	if err != nil {
@@ -91,7 +91,7 @@ func (r *productRepository) Update(ctx context.Context, p *models.Product) error
 }
 
 func (r *productRepository) Delete(ctx context.Context, id int64) error {
-	const q = `UPDATE products SET is_active = false, updated_at = NOW() WHERE id = $1 AND is_active = true`
+	const q = `UPDATE products SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
 
 	result, err := r.db.ExecContext(ctx, q, id)
 	if err != nil {
@@ -106,8 +106,8 @@ func (r *productRepository) Delete(ctx context.Context, id int64) error {
 }
 
 func (r *productRepository) List(ctx context.Context, f *models.ProductFilter) ([]*models.Product, int, error) {
-	query := `SELECT * FROM products WHERE is_active = true`
-	count := `SELECT COUNT(*) FROM products WHERE is_active = true`
+	query := `SELECT * FROM products WHERE deleted_at IS NULL`
+	count := `SELECT COUNT(*) FROM products WHERE deleted_at IS NULL`
 	args := []interface{}{}
 	i := 1
 
@@ -160,8 +160,8 @@ func (r *productRepository) List(ctx context.Context, f *models.ProductFilter) (
 }
 
 func (r *productRepository) ListBySeller(ctx context.Context, sellerID int64, f *models.ProductFilter) ([]*models.Product, int, error) {
-	query := `SELECT * FROM products WHERE is_active = true AND seller_id = $1`
-	count := `SELECT COUNT(*) FROM products WHERE is_active = true AND seller_id = $1`
+	query := `SELECT * FROM products WHERE deleted_at IS NULL AND seller_id = $1`
+	count := `SELECT COUNT(*) FROM products WHERE deleted_at IS NULL AND seller_id = $1`
 	args := []interface{}{sellerID}
 	i := 2
 

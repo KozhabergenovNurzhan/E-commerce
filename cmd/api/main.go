@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/KozhabergenovNurzhan/E-commerce/config"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-migrate/migrate/v4"
@@ -20,7 +21,6 @@ import (
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/auth"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/cache"
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/config"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/handler"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/server"

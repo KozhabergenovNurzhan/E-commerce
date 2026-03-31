@@ -32,7 +32,6 @@ func (s *UserService) Register(ctx context.Context, req *models.Register) (*mode
 		FirstName:    req.FirstName,
 		LastName:     req.LastName,
 		Role:         models.RoleCustomer,
-		IsActive:     true,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}

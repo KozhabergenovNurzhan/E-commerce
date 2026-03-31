@@ -41,7 +41,7 @@ func (s *OrderService) Create(ctx context.Context, userID int64, req *models.Cre
 	}
 
 	if s.db == nil {
-		// test path: validate via repo mock (FindByID already filters is_active=true)
+		// test path: validate via repo mock (FindByID already filters deleted_at IS NULL)
 		var total float64
 		items := make([]models.OrderItem, 0, len(req.Items))
 		for _, r := range req.Items {
@@ -78,7 +78,7 @@ func (s *OrderService) Create(ctx context.Context, userID int64, req *models.Cre
 		Price float64 `db:"price"`
 		Stock int     `db:"stock"`
 	}
-	const qProduct = `SELECT price, stock FROM products WHERE id = $1 AND is_active = true FOR UPDATE`
+	const qProduct = `SELECT price, stock FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`
 
 	var total float64
 	items := make([]models.OrderItem, 0, len(req.Items))

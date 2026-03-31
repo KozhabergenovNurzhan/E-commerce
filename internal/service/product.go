@@ -30,7 +30,6 @@ func (s *ProductService) Create(ctx context.Context, sellerID *int64, req *model
 		Price:       req.Price,
 		Stock:       req.Stock,
 		ImageURL:    req.ImageURL,
-		IsActive:    true,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
