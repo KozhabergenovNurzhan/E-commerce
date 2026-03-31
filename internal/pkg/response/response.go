@@ -35,6 +35,7 @@ func Created(c *gin.Context, data any) {
 
 func NoContent(c *gin.Context) {
 	c.Status(http.StatusNoContent)
+	c.Writer.WriteHeaderNow()
 }
 
 func Paginated(c *gin.Context, data any, meta *Meta) {

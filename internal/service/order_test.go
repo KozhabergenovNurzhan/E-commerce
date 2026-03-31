@@ -5,163 +5,232 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/service"
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/testutil"
 )
 
-func TestCreateOrder(t *testing.T) {
+func TestOrderService_Create(t *testing.T) {
+	ctx := context.Background()
+
 	tests := []struct {
-		name        string
-		req         *models.CreateOrder
-		findProduct func(ctx context.Context, id int64) (*models.Product, error)
-		createOrder func(ctx context.Context, order *models.Order) error
-		wantCode    int
-		check       func(t *testing.T, order *models.Order)
+		name       string
+		req        *models.CreateOrder
+		setup      func(orderRepo *MockOrderRepo, productRepo *MockProductRepo)
+		errCode    int
+		errMsg     string
+		errWrapped error
+		check      func(t *testing.T, o *models.Order)
 	}{
 		{
 			name: "success — multiple items",
-			req: &models.CreateOrder{
-				Items: []models.CreateOrderItem{
-					{ProductID: 1, Quantity: 2},
-					{ProductID: 2, Quantity: 1},
-				},
+			req: &models.CreateOrder{Items: []models.CreateOrderItem{
+				{ProductID: 1, Quantity: 2},
+				{ProductID: 2, Quantity: 1},
+			}},
+			setup: func(orderRepo *MockOrderRepo, productRepo *MockProductRepo) {
+				productRepo.On("FindByID", ctx, int64(1)).
+					Return(&models.Product{ID: 1, Price: 50.0, Stock: 10}, nil).Once()
+				productRepo.On("FindByID", ctx, int64(2)).
+					Return(&models.Product{ID: 2, Price: 50.0, Stock: 10}, nil).Once()
+				orderRepo.On("Create", ctx, mock.AnythingOfType("*models.Order")).
+					Run(func(args mock.Arguments) {
+						args.Get(1).(*models.Order).ID = 1
+					}).
+					Return(nil).Once()
 			},
-			findProduct: func(_ context.Context, id int64) (*models.Product, error) {
-				return &models.Product{ID: id, Price: 50.0, Stock: 10}, nil
-			},
-			createOrder: func(_ context.Context, order *models.Order) error {
-				order.ID = 1
-				return nil
-			},
-			check: func(t *testing.T, order *models.Order) {
-				assert.Equal(t, int64(1), order.ID)
-				assert.Equal(t, 150.0, order.TotalPrice) // 2*50 + 1*50
-				assert.Equal(t, models.OrderStatusPending, order.Status)
-				assert.Len(t, order.Items, 2)
+			check: func(t *testing.T, o *models.Order) {
+				assert.Equal(t, int64(1), o.ID)
+				assert.Equal(t, 150.0, o.TotalPrice) // 2*50 + 1*50
+				assert.Equal(t, models.OrderStatusPending, o.Status)
+				assert.Len(t, o.Items, 2)
 			},
 		},
 		{
 			name: "insufficient stock",
-			req: &models.CreateOrder{
-				Items: []models.CreateOrderItem{
-					{ProductID: 1, Quantity: 5},
-				},
+			req: &models.CreateOrder{Items: []models.CreateOrderItem{
+				{ProductID: 1, Quantity: 5},
+			}},
+			setup: func(_ *MockOrderRepo, productRepo *MockProductRepo) {
+				productRepo.On("FindByID", ctx, int64(1)).
+					Return(&models.Product{ID: 1, Price: 50.0, Stock: 1}, nil).Once()
 			},
-			findProduct: func(_ context.Context, id int64) (*models.Product, error) {
-				return &models.Product{ID: id, Price: 50.0, Stock: 1}, nil
-			},
-			wantCode: http.StatusBadRequest,
+			errCode: http.StatusBadRequest,
+			errMsg:  "insufficient stock",
 		},
 		{
 			name: "product not found",
-			req: &models.CreateOrder{
-				Items: []models.CreateOrderItem{
-					{ProductID: 99, Quantity: 1},
-				},
+			req: &models.CreateOrder{Items: []models.CreateOrderItem{
+				{ProductID: 99, Quantity: 1},
+			}},
+			setup: func(_ *MockOrderRepo, productRepo *MockProductRepo) {
+				productRepo.On("FindByID", ctx, int64(99)).
+					Return(nil, apperrors.NotFound("product not found", nil)).Once()
 			},
-			findProduct: func(_ context.Context, _ int64) (*models.Product, error) {
-				return nil, apperrors.NotFound("product not found", nil)
-			},
-			wantCode: http.StatusNotFound,
+			errCode: http.StatusNotFound,
+			errMsg:  "product not found",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			productRepo := &testutil.MockProductRepo{FindByIDFn: tt.findProduct}
-			orderRepo := &testutil.MockOrderRepo{CreateFn: tt.createOrder}
-
-			order, err := service.NewOrderService(nil, orderRepo, productRepo).
-				Create(context.Background(), 1, tt.req)
-
-			if tt.wantCode != 0 {
-				assertCode(t, err, tt.wantCode)
-				return
+			orderRepo := new(MockOrderRepo)
+			productRepo := new(MockProductRepo)
+			if tt.setup != nil {
+				tt.setup(orderRepo, productRepo)
 			}
-			require.NoError(t, err)
-			tt.check(t, order)
+
+			svc := service.NewOrderService(nil, orderRepo, productRepo)
+			order, err := svc.Create(ctx, 1, tt.req)
+
+			if tt.errCode != 0 {
+				require.Error(t, err)
+				assertAppErr(t, err, tt.errCode, tt.errMsg, tt.errWrapped)
+			} else {
+				require.NoError(t, err)
+				tt.check(t, order)
+			}
+
+			orderRepo.AssertExpectations(t)
+			productRepo.AssertExpectations(t)
 		})
 	}
 }
 
-func TestCancelOrder(t *testing.T) {
+func TestOrderService_Cancel(t *testing.T) {
+	ctx := context.Background()
+
 	tests := []struct {
-		name     string
-		status   models.OrderStatus
-		wantCode int
+		name       string
+		status     models.OrderStatus
+		setup      func(orderRepo *MockOrderRepo)
+		errCode    int
+		errMsg     string
+		errWrapped error
 	}{
-		{name: "pending order can be cancelled", status: models.OrderStatusPending},
-		{name: "confirmed order cannot be cancelled", status: models.OrderStatusConfirmed, wantCode: http.StatusBadRequest},
-		{name: "shipping order cannot be cancelled", status: models.OrderStatusShipping, wantCode: http.StatusBadRequest},
-		{name: "delivered order cannot be cancelled", status: models.OrderStatusDelivered, wantCode: http.StatusBadRequest},
-		{name: "already cancelled order cannot be cancelled", status: models.OrderStatusCancelled, wantCode: http.StatusBadRequest},
+		{
+			name:   "pending order can be cancelled",
+			status: models.OrderStatusPending,
+			setup: func(r *MockOrderRepo) {
+				r.On("FindByID", ctx, int64(1)).
+					Return(&models.Order{ID: 1, Status: models.OrderStatusPending}, nil).Once()
+				r.On("UpdateStatus", ctx, int64(1), models.OrderStatusCancelled).
+					Return(nil).Once()
+			},
+		},
+		{
+			name:   "confirmed order cannot be cancelled",
+			status: models.OrderStatusConfirmed,
+			setup: func(r *MockOrderRepo) {
+				r.On("FindByID", ctx, int64(1)).
+					Return(&models.Order{ID: 1, Status: models.OrderStatusConfirmed}, nil).Once()
+			},
+			errCode: http.StatusBadRequest,
+			errMsg:  "only pending orders can be cancelled",
+		},
+		{
+			name:   "already cancelled order cannot be cancelled",
+			status: models.OrderStatusCancelled,
+			setup: func(r *MockOrderRepo) {
+				r.On("FindByID", ctx, int64(1)).
+					Return(&models.Order{ID: 1, Status: models.OrderStatusCancelled}, nil).Once()
+			},
+			errCode: http.StatusBadRequest,
+			errMsg:  "only pending orders can be cancelled",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			orderRepo := &testutil.MockOrderRepo{
-				FindByIDFn: func(_ context.Context, id int64) (*models.Order, error) {
-					return &models.Order{ID: id, Status: tt.status}, nil
-				},
-				UpdateStatusFn: func(_ context.Context, _ int64, _ models.OrderStatus) error {
-					return nil
-				},
+			orderRepo := new(MockOrderRepo)
+			if tt.setup != nil {
+				tt.setup(orderRepo)
 			}
 
-			err := service.NewOrderService(nil, orderRepo, nil).Cancel(context.Background(), 1)
+			svc := service.NewOrderService(nil, orderRepo, nil)
+			err := svc.Cancel(ctx, 1)
 
-			if tt.wantCode != 0 {
-				assertCode(t, err, tt.wantCode)
+			if tt.errCode != 0 {
+				require.Error(t, err)
+				assertAppErr(t, err, tt.errCode, tt.errMsg, tt.errWrapped)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
+
+			orderRepo.AssertExpectations(t)
 		})
 	}
 }
 
-func TestUpdateOrderStatus(t *testing.T) {
+func TestOrderService_UpdateStatus(t *testing.T) {
+	ctx := context.Background()
+
 	tests := []struct {
-		name      string
-		findOrder func(ctx context.Context, id int64) (*models.Order, error)
-		newStatus models.OrderStatus
-		wantCode  int
+		name       string
+		id         int64
+		newStatus  models.OrderStatus
+		setup      func(r *MockOrderRepo)
+		errCode    int
+		errMsg     string
+		errWrapped error
 	}{
 		{
-			name: "success",
-			findOrder: func(_ context.Context, id int64) (*models.Order, error) {
-				return &models.Order{ID: id, Status: models.OrderStatusPending}, nil
-			},
+			name:      "success — pending to confirmed",
+			id:        1,
 			newStatus: models.OrderStatusConfirmed,
+			setup: func(r *MockOrderRepo) {
+				r.On("FindByID", ctx, int64(1)).
+					Return(&models.Order{ID: 1, Status: models.OrderStatusPending}, nil).Once()
+				r.On("UpdateStatus", ctx, int64(1), models.OrderStatusConfirmed).
+					Return(nil).Once()
+			},
 		},
 		{
-			name: "order not found",
-			findOrder: func(_ context.Context, _ int64) (*models.Order, error) {
-				return nil, apperrors.NotFound("order not found", nil)
+			name:      "invalid transition — pending to shipping",
+			id:        1,
+			newStatus: models.OrderStatusShipping,
+			setup: func(r *MockOrderRepo) {
+				r.On("FindByID", ctx, int64(1)).
+					Return(&models.Order{ID: 1, Status: models.OrderStatusPending}, nil).Once()
 			},
+			errCode: http.StatusBadRequest,
+			errMsg:  "cannot transition from pending to shipping",
+		},
+		{
+			name:      "order not found",
+			id:        99,
 			newStatus: models.OrderStatusConfirmed,
-			wantCode:  http.StatusNotFound,
+			setup: func(r *MockOrderRepo) {
+				r.On("FindByID", ctx, int64(99)).
+					Return(nil, apperrors.NotFound("order not found", nil)).Once()
+			},
+			errCode: http.StatusNotFound,
+			errMsg:  "order not found",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			orderRepo := &testutil.MockOrderRepo{
-				FindByIDFn:     tt.findOrder,
-				UpdateStatusFn: func(_ context.Context, _ int64, _ models.OrderStatus) error { return nil },
+			orderRepo := new(MockOrderRepo)
+			if tt.setup != nil {
+				tt.setup(orderRepo)
 			}
 
-			err := service.NewOrderService(nil, orderRepo, nil).UpdateStatus(context.Background(), 1, tt.newStatus)
+			svc := service.NewOrderService(nil, orderRepo, nil)
+			err := svc.UpdateStatus(ctx, tt.id, tt.newStatus)
 
-			if tt.wantCode != 0 {
-				assertCode(t, err, tt.wantCode)
+			if tt.errCode != 0 {
+				require.Error(t, err)
+				assertAppErr(t, err, tt.errCode, tt.errMsg, tt.errWrapped)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
+
+			orderRepo.AssertExpectations(t)
 		})
 	}
 }

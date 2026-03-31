@@ -1,13 +1,13 @@
 package service
 
 type Services struct {
-	User    *UserService
-	Product *ProductService
-	Order   *OrderService
-	Token   *TokenService
-	Cart    *CartService
-	Review  *ReviewService
-	Address *AddressService
+	User    UserServiceI
+	Product ProductServiceI
+	Order   OrderServiceI
+	Token   TokenServiceI
+	Cart    CartServiceI
+	Review  ReviewServiceI
+	Address AddressServiceI
 }
 
 func NewServices(

@@ -5,23 +5,27 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/service"
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/testutil"
 )
 
-func TestRegister(t *testing.T) {
+func TestUserService_Register(t *testing.T) {
+	ctx := context.Background()
+
 	tests := []struct {
-		name     string
-		req      *models.Register
-		createFn func(ctx context.Context, user *models.UserRecord) error
-		wantCode int
-		check    func(t *testing.T, resp *models.User)
+		name       string
+		req        *models.Register
+		setup      func(r *MockUserRepo)
+		errCode    int
+		errMsg     string
+		errWrapped error
+		check      func(t *testing.T, u *models.User)
 	}{
 		{
 			name: "success",
@@ -31,93 +35,122 @@ func TestRegister(t *testing.T) {
 				FirstName: "John",
 				LastName:  "Doe",
 			},
-			createFn: func(_ context.Context, user *models.UserRecord) error {
-				user.ID = 1
-				return nil
+			setup: func(r *MockUserRepo) {
+				r.On("Create", ctx, mock.AnythingOfType("*models.UserRecord")).
+					Run(func(args mock.Arguments) {
+						args.Get(1).(*models.UserRecord).ID = 1
+					}).
+					Return(nil).Once()
 			},
-			check: func(t *testing.T, resp *models.User) {
-				assert.Equal(t, int64(1), resp.ID)
-				assert.Equal(t, "john@example.com", resp.Email)
-				assert.Equal(t, models.RoleCustomer, resp.Role)
+			check: func(t *testing.T, u *models.User) {
+				assert.Equal(t, int64(1), u.ID)
+				assert.Equal(t, "john@example.com", u.Email)
+				assert.Equal(t, models.RoleCustomer, u.Role)
 			},
 		},
 		{
 			name: "email already taken",
 			req: &models.Register{
-				Email:     "existing@example.com",
-				Password:  "password123",
-				FirstName: "Jane",
-				LastName:  "Doe",
+				Email:    "existing@example.com",
+				Password: "password123",
 			},
-			createFn: func(_ context.Context, _ *models.UserRecord) error {
-				return apperrors.Conflict("email already taken", nil)
+			setup: func(r *MockUserRepo) {
+				r.On("Create", ctx, mock.AnythingOfType("*models.UserRecord")).
+					Return(apperrors.Conflict("email already taken", nil)).Once()
 			},
-			wantCode: http.StatusConflict,
+			errCode: http.StatusConflict,
+			errMsg:  "email already taken",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := &testutil.MockUserRepo{CreateFn: tt.createFn}
-			resp, err := service.NewUserService(repo).Register(context.Background(), tt.req)
-
-			if tt.wantCode != 0 {
-				assertCode(t, err, tt.wantCode)
-				return
+			userRepo := new(MockUserRepo)
+			if tt.setup != nil {
+				tt.setup(userRepo)
 			}
-			require.NoError(t, err)
-			tt.check(t, resp)
+
+			svc := service.NewUserService(userRepo)
+			user, err := svc.Register(ctx, tt.req)
+
+			if tt.errCode != 0 {
+				require.Error(t, err)
+				assertAppErr(t, err, tt.errCode, tt.errMsg, tt.errWrapped)
+			} else {
+				require.NoError(t, err)
+				tt.check(t, user)
+			}
+
+			userRepo.AssertExpectations(t)
 		})
 	}
 }
 
-func TestLogin(t *testing.T) {
-	hash, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
+func TestUserService_Login(t *testing.T) {
+	ctx := context.Background()
+	hash, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.MinCost)
 
 	tests := []struct {
-		name          string
-		req           *models.Login
-		findByEmailFn func(ctx context.Context, email string) (*models.UserRecord, error)
-		wantCode      int
-		wantUserID    int64
+		name       string
+		req        *models.Login
+		setup      func(r *MockUserRepo)
+		errCode    int
+		errMsg     string
+		errWrapped error
+		check      func(t *testing.T, u *models.UserRecord)
 	}{
 		{
 			name: "success",
 			req:  &models.Login{Email: "john@example.com", Password: "password123"},
-			findByEmailFn: func(_ context.Context, email string) (*models.UserRecord, error) {
-				return &models.UserRecord{ID: 1, Email: email, PasswordHash: string(hash), Role: models.RoleCustomer}, nil
+			setup: func(r *MockUserRepo) {
+				r.On("FindByEmail", ctx, "john@example.com").
+					Return(&models.UserRecord{ID: 1, Email: "john@example.com", PasswordHash: string(hash), Role: models.RoleCustomer}, nil).Once()
 			},
-			wantUserID: 1,
+			check: func(t *testing.T, u *models.UserRecord) {
+				assert.Equal(t, int64(1), u.ID)
+			},
 		},
 		{
 			name: "wrong password",
 			req:  &models.Login{Email: "john@example.com", Password: "wrongpass"},
-			findByEmailFn: func(_ context.Context, email string) (*models.UserRecord, error) {
-				return &models.UserRecord{ID: 1, Email: email, PasswordHash: string(hash)}, nil
+			setup: func(r *MockUserRepo) {
+				r.On("FindByEmail", ctx, "john@example.com").
+					Return(&models.UserRecord{PasswordHash: string(hash)}, nil).Once()
 			},
-			wantCode: http.StatusBadRequest,
+			errCode: http.StatusBadRequest,
+			errMsg:  "invalid credentials",
 		},
 		{
 			name: "user not found returns bad request to avoid enumeration",
 			req:  &models.Login{Email: "nobody@example.com", Password: "password123"},
-			findByEmailFn: func(_ context.Context, _ string) (*models.UserRecord, error) {
-				return nil, apperrors.NotFound("user not found", nil)
+			setup: func(r *MockUserRepo) {
+				r.On("FindByEmail", ctx, "nobody@example.com").
+					Return(nil, apperrors.NotFound("user not found", nil)).Once()
 			},
-			wantCode: http.StatusBadRequest,
+			errCode: http.StatusBadRequest,
+			errMsg:  "invalid credentials",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := &testutil.MockUserRepo{FindByEmailFn: tt.findByEmailFn}
-			user, err := service.NewUserService(repo).Login(context.Background(), tt.req)
-
-			if tt.wantCode != 0 {
-				assertCode(t, err, tt.wantCode)
-				return
+			userRepo := new(MockUserRepo)
+			if tt.setup != nil {
+				tt.setup(userRepo)
 			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantUserID, user.ID)
+
+			svc := service.NewUserService(userRepo)
+			user, err := svc.Login(ctx, tt.req)
+
+			if tt.errCode != 0 {
+				require.Error(t, err)
+				assertAppErr(t, err, tt.errCode, tt.errMsg, tt.errWrapped)
+			} else {
+				require.NoError(t, err)
+				tt.check(t, user)
+			}
+
+			userRepo.AssertExpectations(t)
 		})
 	}
 }

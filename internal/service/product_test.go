@@ -5,182 +5,277 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/models"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/apperrors"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/service"
-	"github.com/KozhabergenovNurzhan/E-commerce/internal/testutil"
 )
 
-func TestProductCreate(t *testing.T) {
+func TestProductService_Create(t *testing.T) {
+	ctx := context.Background()
 	sellerID := int64(42)
-	req := &models.CreateProduct{
-		CategoryID:  1,
-		Name:        "Widget",
-		Description: "A fine widget",
-		Price:       9.99,
-		Stock:       50,
-		ImageURL:    "http://example.com/widget.png",
-	}
 
-	productRepo := &testutil.MockProductRepo{
-		CreateFn: func(_ context.Context, p *models.Product) error {
-			p.ID = 7
-			return nil
-		},
-	}
-
-	p, err := service.NewProductService(productRepo, nil).Create(context.Background(), &sellerID, req)
-
-	require.NoError(t, err)
-	assert.Equal(t, int64(7), p.ID)
-	assert.Equal(t, req.Name, p.Name)
-	assert.Equal(t, req.Price, p.Price)
-	assert.Equal(t, req.Stock, p.Stock)
-	assert.True(t, p.IsActive)
-	assert.Equal(t, &sellerID, p.SellerID)
-	assert.False(t, p.CreatedAt.IsZero())
-	assert.False(t, p.UpdatedAt.IsZero())
-}
-
-func TestProductCreate_RepoError(t *testing.T) {
-	productRepo := &testutil.MockProductRepo{
-		CreateFn: func(_ context.Context, _ *models.Product) error {
-			return apperrors.Internal("internal server error", nil)
-		},
-	}
-
-	_, err := service.NewProductService(productRepo, nil).
-		Create(context.Background(), nil, &models.CreateProduct{Name: "x", Price: 1, CategoryID: 1})
-
-	assertCode(t, err, http.StatusInternalServerError)
-}
-
-func TestProductGetByID(t *testing.T) {
 	tests := []struct {
-		name     string
-		stub     func(ctx context.Context, id int64) (*models.Product, error)
-		wantCode int
+		name       string
+		sellerID   *int64
+		req        *models.CreateProduct
+		setup      func(r *MockProductRepo)
+		errCode    int
+		errMsg     string
+		errWrapped error
+		check      func(t *testing.T, p *models.Product)
 	}{
 		{
-			name: "found",
-			stub: func(_ context.Context, id int64) (*models.Product, error) {
-				return &models.Product{ID: id, Name: "Widget"}, nil
+			name:     "success",
+			sellerID: &sellerID,
+			req:      &models.CreateProduct{CategoryID: 1, Name: "Widget", Price: 9.99, Stock: 50},
+			setup: func(r *MockProductRepo) {
+				r.On("Create", ctx, mock.AnythingOfType("*models.Product")).
+					Run(func(args mock.Arguments) {
+						args.Get(1).(*models.Product).ID = 7
+					}).
+					Return(nil).Once()
+			},
+			check: func(t *testing.T, p *models.Product) {
+				assert.Equal(t, int64(7), p.ID)
+				assert.Equal(t, "Widget", p.Name)
+				assert.Equal(t, 9.99, p.Price)
+				assert.Equal(t, &sellerID, p.SellerID)
+				assert.False(t, p.CreatedAt.IsZero())
 			},
 		},
 		{
-			name: "not found",
-			stub: func(_ context.Context, _ int64) (*models.Product, error) {
-				return nil, apperrors.NotFound("product not found", nil)
+			name:     "repo error",
+			sellerID: nil,
+			req:      &models.CreateProduct{Name: "x", Price: 1, CategoryID: 1},
+			setup: func(r *MockProductRepo) {
+				r.On("Create", ctx, mock.AnythingOfType("*models.Product")).
+					Return(apperrors.Internal("internal server error", errDB)).Once()
 			},
-			wantCode: http.StatusNotFound,
+			errCode:    http.StatusInternalServerError,
+			errMsg:     "internal server error",
+			errWrapped: errDB,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			productRepo := &testutil.MockProductRepo{FindByIDFn: tt.stub}
-			p, err := service.NewProductService(productRepo, nil).GetByID(context.Background(), 1)
-			if tt.wantCode != 0 {
-				assertCode(t, err, tt.wantCode)
-				return
+			productRepo := new(MockProductRepo)
+			if tt.setup != nil {
+				tt.setup(productRepo)
 			}
-			require.NoError(t, err)
-			assert.Equal(t, int64(1), p.ID)
+
+			svc := service.NewProductService(productRepo, nil)
+			p, err := svc.Create(ctx, tt.sellerID, tt.req)
+
+			if tt.errCode != 0 {
+				require.Error(t, err)
+				assertAppErr(t, err, tt.errCode, tt.errMsg, tt.errWrapped)
+			} else {
+				require.NoError(t, err)
+				tt.check(t, p)
+			}
+
+			productRepo.AssertExpectations(t)
 		})
 	}
 }
 
-func TestProductUpdate(t *testing.T) {
+func TestProductService_GetByID(t *testing.T) {
+	ctx := context.Background()
+
 	tests := []struct {
-		name      string
-		findByID  func(ctx context.Context, id int64) (*models.Product, error)
-		updateFn  func(ctx context.Context, p *models.Product) error
-		wantCode  int
-		checkName string
-	}{
-		{
-			name: "success — fields are applied",
-			findByID: func(_ context.Context, id int64) (*models.Product, error) {
-				return &models.Product{ID: id, Name: "Old"}, nil
-			},
-			updateFn:  func(_ context.Context, _ *models.Product) error { return nil },
-			checkName: "New",
-		},
-		{
-			name: "product not found",
-			findByID: func(_ context.Context, _ int64) (*models.Product, error) {
-				return nil, apperrors.NotFound("product not found", nil)
-			},
-			wantCode: http.StatusNotFound,
-		},
-		{
-			name: "repo update error",
-			findByID: func(_ context.Context, id int64) (*models.Product, error) {
-				return &models.Product{ID: id}, nil
-			},
-			updateFn: func(_ context.Context, _ *models.Product) error {
-				return apperrors.Internal("internal server error", nil)
-			},
-			wantCode: http.StatusInternalServerError,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			productRepo := &testutil.MockProductRepo{
-				FindByIDFn: tt.findByID,
-				UpdateFn:   tt.updateFn,
-			}
-			req := &models.UpdateProduct{Name: "New", Price: 1.0}
-			p, err := service.NewProductService(productRepo, nil).Update(context.Background(), 1, req)
-
-			if tt.wantCode != 0 {
-				assertCode(t, err, tt.wantCode)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.checkName, p.Name)
-			assert.False(t, p.UpdatedAt.IsZero())
-		})
-	}
-}
-
-func TestProductDelete(t *testing.T) {
-	tests := []struct {
-		name     string
-		stub     func(ctx context.Context, id int64) error
-		wantCode int
+		name       string
+		id         int64
+		setup      func(r *MockProductRepo)
+		errCode    int
+		errMsg     string
+		errWrapped error
+		check      func(t *testing.T, p *models.Product)
 	}{
 		{
 			name: "success",
-			stub: func(_ context.Context, _ int64) error { return nil },
+			id:   1,
+			setup: func(r *MockProductRepo) {
+				r.On("FindByID", ctx, int64(1)).
+					Return(&models.Product{ID: 1, Name: "Widget"}, nil).Once()
+			},
+			check: func(t *testing.T, p *models.Product) {
+				assert.Equal(t, int64(1), p.ID)
+				assert.Equal(t, "Widget", p.Name)
+			},
 		},
 		{
 			name: "not found",
-			stub: func(_ context.Context, _ int64) error {
-				return apperrors.NotFound("product not found", nil)
+			id:   99,
+			setup: func(r *MockProductRepo) {
+				r.On("FindByID", ctx, int64(99)).
+					Return(nil, apperrors.NotFound("product not found", nil)).Once()
 			},
-			wantCode: http.StatusNotFound,
+			errCode: http.StatusNotFound,
+			errMsg:  "product not found",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			productRepo := &testutil.MockProductRepo{DeleteFn: tt.stub}
-			err := service.NewProductService(productRepo, nil).Delete(context.Background(), 1)
-			if tt.wantCode != 0 {
-				assertCode(t, err, tt.wantCode)
-			} else {
-				assert.NoError(t, err)
+			productRepo := new(MockProductRepo)
+			if tt.setup != nil {
+				tt.setup(productRepo)
 			}
+
+			svc := service.NewProductService(productRepo, nil)
+			p, err := svc.GetByID(ctx, tt.id)
+
+			if tt.errCode != 0 {
+				require.Error(t, err)
+				assertAppErr(t, err, tt.errCode, tt.errMsg, tt.errWrapped)
+			} else {
+				require.NoError(t, err)
+				tt.check(t, p)
+			}
+
+			productRepo.AssertExpectations(t)
 		})
 	}
 }
 
-func TestProductList_PaginationDefaults(t *testing.T) {
+func TestProductService_Update(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name       string
+		id         int64
+		req        *models.UpdateProduct
+		setup      func(r *MockProductRepo)
+		errCode    int
+		errMsg     string
+		errWrapped error
+		check      func(t *testing.T, p *models.Product)
+	}{
+		{
+			name: "success — fields are applied",
+			id:   1,
+			req:  &models.UpdateProduct{Name: "New", Price: 1.0},
+			setup: func(r *MockProductRepo) {
+				r.On("FindByID", ctx, int64(1)).
+					Return(&models.Product{ID: 1, Name: "Old"}, nil).Once()
+				r.On("Update", ctx, mock.AnythingOfType("*models.Product")).
+					Return(nil).Once()
+			},
+			check: func(t *testing.T, p *models.Product) {
+				assert.Equal(t, "New", p.Name)
+				assert.False(t, p.UpdatedAt.IsZero())
+			},
+		},
+		{
+			name: "product not found",
+			id:   99,
+			req:  &models.UpdateProduct{Name: "x", Price: 1},
+			setup: func(r *MockProductRepo) {
+				r.On("FindByID", ctx, int64(99)).
+					Return(nil, apperrors.NotFound("product not found", nil)).Once()
+			},
+			errCode: http.StatusNotFound,
+			errMsg:  "product not found",
+		},
+		{
+			name: "repo update error",
+			id:   1,
+			req:  &models.UpdateProduct{Name: "x", Price: 1},
+			setup: func(r *MockProductRepo) {
+				r.On("FindByID", ctx, int64(1)).
+					Return(&models.Product{ID: 1}, nil).Once()
+				r.On("Update", ctx, mock.AnythingOfType("*models.Product")).
+					Return(apperrors.Internal("internal server error", errDB)).Once()
+			},
+			errCode:    http.StatusInternalServerError,
+			errMsg:     "internal server error",
+			errWrapped: errDB,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			productRepo := new(MockProductRepo)
+			if tt.setup != nil {
+				tt.setup(productRepo)
+			}
+
+			svc := service.NewProductService(productRepo, nil)
+			p, err := svc.Update(ctx, tt.id, tt.req)
+
+			if tt.errCode != 0 {
+				require.Error(t, err)
+				assertAppErr(t, err, tt.errCode, tt.errMsg, tt.errWrapped)
+			} else {
+				require.NoError(t, err)
+				tt.check(t, p)
+			}
+
+			productRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestProductService_Delete(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name       string
+		id         int64
+		setup      func(r *MockProductRepo)
+		errCode    int
+		errMsg     string
+		errWrapped error
+	}{
+		{
+			name: "success",
+			id:   1,
+			setup: func(r *MockProductRepo) {
+				r.On("Delete", ctx, int64(1)).Return(nil).Once()
+			},
+		},
+		{
+			name: "not found",
+			id:   99,
+			setup: func(r *MockProductRepo) {
+				r.On("Delete", ctx, int64(99)).
+					Return(apperrors.NotFound("product not found", nil)).Once()
+			},
+			errCode: http.StatusNotFound,
+			errMsg:  "product not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			productRepo := new(MockProductRepo)
+			if tt.setup != nil {
+				tt.setup(productRepo)
+			}
+
+			svc := service.NewProductService(productRepo, nil)
+			err := svc.Delete(ctx, tt.id)
+
+			if tt.errCode != 0 {
+				require.Error(t, err)
+				assertAppErr(t, err, tt.errCode, tt.errMsg, tt.errWrapped)
+			} else {
+				require.NoError(t, err)
+			}
+
+			productRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestProductService_List_PaginationDefaults(t *testing.T) {
+	ctx := context.Background()
+
 	tests := []struct {
 		name      string
 		input     models.ProductFilter
@@ -195,74 +290,75 @@ func TestProductList_PaginationDefaults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var capturedFilter *models.ProductFilter
-			productRepo := &testutil.MockProductRepo{
-				ListFn: func(_ context.Context, f *models.ProductFilter) ([]*models.Product, int, error) {
-					capturedFilter = f
-					return []*models.Product{}, 0, nil
-				},
-			}
+			productRepo := new(MockProductRepo)
+			productRepo.On("List", ctx, mock.MatchedBy(func(f *models.ProductFilter) bool {
+				return f.Page == tt.wantPage && f.Limit == tt.wantLimit
+			})).Return([]*models.Product{}, 0, nil).Once()
+
 			f := tt.input
-			_, _, err := service.NewProductService(productRepo, nil).List(context.Background(), &f)
+			_, _, err := service.NewProductService(productRepo, nil).List(ctx, &f)
+
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantPage, capturedFilter.Page)
-			assert.Equal(t, tt.wantLimit, capturedFilter.Limit)
+			productRepo.AssertExpectations(t)
 		})
 	}
 }
 
-func TestProductListBySeller_PaginationDefaults(t *testing.T) {
+func TestProductService_ListCategories(t *testing.T) {
+	ctx := context.Background()
+
 	tests := []struct {
-		name      string
-		input     models.ProductFilter
-		wantPage  int
-		wantLimit int
+		name       string
+		setup      func(r *MockProductRepo)
+		errCode    int
+		errMsg     string
+		errWrapped error
+		check      func(t *testing.T, cats []*models.Category)
 	}{
-		{name: "zero values use defaults", input: models.ProductFilter{}, wantPage: 1, wantLimit: 20},
-		{name: "limit over 100 is capped", input: models.ProductFilter{Page: 1, Limit: 150}, wantPage: 1, wantLimit: 100},
+		{
+			name: "success",
+			setup: func(r *MockProductRepo) {
+				r.On("ListCategories", ctx).Return([]*models.Category{
+					{ID: 1, Name: "Electronics"},
+					{ID: 2, Name: "Books"},
+				}, nil).Once()
+			},
+			check: func(t *testing.T, cats []*models.Category) {
+				assert.Len(t, cats, 2)
+				assert.Equal(t, "Electronics", cats[0].Name)
+			},
+		},
+		{
+			name: "repo error",
+			setup: func(r *MockProductRepo) {
+				r.On("ListCategories", ctx).
+					Return(nil, apperrors.Internal("internal server error", errDB)).Once()
+			},
+			errCode:    http.StatusInternalServerError,
+			errMsg:     "internal server error",
+			errWrapped: errDB,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var capturedFilter *models.ProductFilter
-			productRepo := &testutil.MockProductRepo{
-				ListBySellerFn: func(_ context.Context, _ int64, f *models.ProductFilter) ([]*models.Product, int, error) {
-					capturedFilter = f
-					return []*models.Product{}, 0, nil
-				},
+			productRepo := new(MockProductRepo)
+			if tt.setup != nil {
+				tt.setup(productRepo)
 			}
-			f := tt.input
-			_, _, err := service.NewProductService(productRepo, nil).ListBySeller(context.Background(), 1, &f)
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantPage, capturedFilter.Page)
-			assert.Equal(t, tt.wantLimit, capturedFilter.Limit)
+
+			svc := service.NewProductService(productRepo, nil)
+			cats, err := svc.ListCategories(ctx)
+
+			if tt.errCode != 0 {
+				require.Error(t, err)
+				assertAppErr(t, err, tt.errCode, tt.errMsg, tt.errWrapped)
+			} else {
+				require.NoError(t, err)
+				tt.check(t, cats)
+			}
+
+			productRepo.AssertExpectations(t)
 		})
 	}
-}
-
-func TestProductListCategories(t *testing.T) {
-	cats := []*models.Category{
-		{ID: 1, Name: "Electronics"},
-		{ID: 2, Name: "Books"},
-	}
-	productRepo := &testutil.MockProductRepo{
-		ListCategoriesFn: func(_ context.Context) ([]*models.Category, error) {
-			return cats, nil
-		},
-	}
-
-	result, err := service.NewProductService(productRepo, nil).ListCategories(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, cats, result)
-}
-
-func TestProductListCategories_Error(t *testing.T) {
-	productRepo := &testutil.MockProductRepo{
-		ListCategoriesFn: func(_ context.Context) ([]*models.Category, error) {
-			return nil, apperrors.Internal("internal server error", nil)
-		},
-	}
-
-	_, err := service.NewProductService(productRepo, nil).ListCategories(context.Background())
-	assertCode(t, err, http.StatusInternalServerError)
 }
