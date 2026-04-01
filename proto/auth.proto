@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package ecommerce.auth.v1;
+
+option go_package = "github.com/KozhabergenovNurzhan/E-commerce/internal/grpc/pb";
+
+// AuthService handles authentication and token management.
+service AuthService {
+  rpc Register(RegisterRequest) returns (AuthResponse);
+  rpc Login(LoginRequest) returns (AuthResponse);
+  rpc Refresh(RefreshRequest) returns (TokensResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+}
+
+message RegisterRequest {
+  string email      = 1;
+  string password   = 2;
+  string first_name = 3;
+  string last_name  = 4;
+}
+
+message LoginRequest {
+  string email    = 1;
+  string password = 2;
+}
+
+message RefreshRequest {
+  string refresh_token = 1;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+}
+
+message AuthResponse {
+  UserMessage  user   = 1;
+  TokensResponse tokens = 2;
+}
+
+message TokensResponse {
+  string access_token  = 1;
+  string refresh_token = 2;
+  int64  expires_in    = 3;
+}
+
+message UserMessage {
+  int64  id         = 1;
+  string email      = 2;
+  string first_name = 3;
+  string last_name  = 4;
+  string role       = 5;
+  int64  created_at = 6;
+}
+
+message LogoutResponse {}

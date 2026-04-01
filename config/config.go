@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	Port      string
+	GRPCPort  string
 	DB        DBConfig
 	JWT       JWTConfig
 	Redis     RedisConfig
@@ -55,7 +56,8 @@ func (d DBConfig) MigrateURL() string {
 
 func Load() *Config {
 	return &Config{
-		Port: getEnv("PORT", "8080"),
+		Port:     getEnv("PORT", "8080"),
+		GRPCPort: getEnv("GRPC_PORT", "9090"),
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnv("DB_PORT", "5432"),

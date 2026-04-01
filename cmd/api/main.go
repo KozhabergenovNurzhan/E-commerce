@@ -21,6 +21,7 @@ import (
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/auth"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/cache"
+	grpcserver "github.com/KozhabergenovNurzhan/E-commerce/internal/grpc"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/handler"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/repository"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/server"
@@ -33,17 +34,32 @@ func main() {
 	log := logger.New("ecommerce", cfg.LogLevel, cfg.LogFormat)
 	slog.SetDefault(log)
 
-	router, err := buildApp(cfg, log)
+	router, svc, authMgr, err := buildApp(cfg, log)
 	if err != nil {
 		log.Error("failed to build app", slog.String("err", err.Error()))
 		os.Exit(1)
 	}
 
+	// ── HTTP server ──────────────────────────────────────────────────────────
 	srv := server.New(cfg.Port, router)
 	go func() {
-		log.Info("server starting", slog.String("port", cfg.Port))
+		log.Info("HTTP server starting", slog.String("port", cfg.Port))
 		if err := srv.Run(); err != nil && err != http.ErrServerClosed {
-			log.Error("server error", slog.String("err", err.Error()))
+			log.Error("HTTP server error", slog.String("err", err.Error()))
+			os.Exit(1)
+		}
+	}()
+
+	// ── gRPC server ──────────────────────────────────────────────────────────
+	grpcSrv, err := grpcserver.New(cfg.GRPCPort, svc, authMgr)
+	if err != nil {
+		log.Error("failed to create gRPC server", slog.String("err", err.Error()))
+		os.Exit(1)
+	}
+	go func() {
+		log.Info("gRPC server starting", slog.String("port", cfg.GRPCPort))
+		if err := grpcSrv.Run(); err != nil {
+			log.Error("gRPC server error", slog.String("err", err.Error()))
 			os.Exit(1)
 		}
 	}()
@@ -56,19 +72,20 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Error("shutdown error", slog.String("err", err.Error()))
+		log.Error("HTTP shutdown error", slog.String("err", err.Error()))
 	}
-	log.Info("server stopped")
+	grpcSrv.Stop()
+	log.Info("servers stopped")
 }
 
-func buildApp(cfg *config.Config, log *slog.Logger) (*gin.Engine, error) {
+func buildApp(cfg *config.Config, log *slog.Logger) (*gin.Engine, *service.Services, auth.Manager, error) {
 	db, err := connectDB(cfg.DB, log)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	if err := runMigrations(cfg.DB, log); err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	authMgr := auth.NewJWTManager(cfg.JWT.Secret, cfg.JWT.AccessTTL)
@@ -101,7 +118,7 @@ func buildApp(cfg *config.Config, log *slog.Logger) (*gin.Engine, error) {
 	)
 
 	h := handler.NewHandler(svc, authMgr, log, db, idempotencyStore)
-	return h.InitRoutes(), nil
+	return h.InitRoutes(), svc, authMgr, nil
 }
 
 func connectDB(cfg config.DBConfig, log *slog.Logger) (*sqlx.DB, error) {
