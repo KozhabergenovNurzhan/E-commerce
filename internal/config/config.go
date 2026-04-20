@@ -8,11 +8,11 @@ import (
 )
 
 type Config struct {
-	Port      string
-	DB        DBConfig
-	JWT       JWTConfig
-	Redis     RedisConfig
-	LogLevel  slog.Level
+	Port     string
+	DB       DBConfig
+	JWT      JWTConfig
+	Redis    RedisConfig
+	LogLevel slog.Level
 	LogFormat string // "text" | "json"
 }
 

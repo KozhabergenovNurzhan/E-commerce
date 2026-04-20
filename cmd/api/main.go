@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/KozhabergenovNurzhan/E-commerce/config"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/config"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-migrate/migrate/v4"
