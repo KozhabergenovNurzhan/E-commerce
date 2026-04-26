@@ -2,9 +2,12 @@ package middleware
 
 import (
 	"bytes"
+	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/cache"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/response"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,27 +29,43 @@ func (r *responseRecorder) WriteHeader(status int) {
 }
 
 // Idempotency caches successful responses keyed by userID + Idempotency-Key header.
-// If the header is absent the request passes through unchanged.
-// If store is nil (Redis unavailable) the middleware is a no-op.
+// Requests without the header pass through unchanged.
+// Fail closed: if store is nil (Redis unavailable at startup) or Redis becomes unavailable
+// at runtime, requests carrying Idempotency-Key are rejected with 503 rather than
+// processed non-idempotently.
 func Idempotency(store *cache.IdempotencyStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if store == nil {
-			c.Next()
-			return
-		}
-
 		key := c.GetHeader("Idempotency-Key")
 		if key == "" {
 			c.Next()
 			return
 		}
 
+		if store == nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, response.Response{
+				Success: false,
+				Error:   "idempotency service unavailable",
+			})
+			return
+		}
+
 		userID := MustUserID(c)
 
-		if rec, err := store.Get(c.Request.Context(), userID, key); err == nil {
+		rec, err := store.Get(c.Request.Context(), userID, key)
+		switch {
+		case err == nil:
 			c.Header("X-Idempotent-Replayed", "true")
 			c.Data(rec.StatusCode, "application/json; charset=utf-8", rec.Body)
 			c.Abort()
+			return
+		case errors.Is(err, cache.ErrNotFound):
+			// new key — proceed to handler
+		default:
+			slog.Warn("idempotency store unavailable", "error", err)
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, response.Response{
+				Success: false,
+				Error:   "idempotency service unavailable",
+			})
 			return
 		}
 
@@ -56,10 +75,12 @@ func Idempotency(store *cache.IdempotencyStore) gin.HandlerFunc {
 		c.Next()
 
 		if recorder.status >= 200 && recorder.status < 300 {
-			_ = store.Set(c.Request.Context(), userID, key, &cache.IdempotencyRecord{
+			if err := store.Set(c.Request.Context(), userID, key, &cache.IdempotencyRecord{
 				StatusCode: recorder.status,
 				Body:       recorder.body.Bytes(),
-			})
+			}); err != nil {
+				slog.Warn("failed to store idempotency record", "error", err)
+			}
 		}
 	}
 }

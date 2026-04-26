@@ -3,11 +3,16 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
+
+// ErrNotFound is returned by Get when the idempotency key does not exist in the store.
+// Callers should distinguish this from a Redis connectivity error.
+var ErrNotFound = errors.New("idempotency key not found")
 
 type IdempotencyRecord struct {
 	StatusCode int    `json:"status_code"`
@@ -26,6 +31,9 @@ func NewIdempotencyStore(client *redis.Client, ttl time.Duration) *IdempotencySt
 func (s *IdempotencyStore) Get(ctx context.Context, userID int64, key string) (*IdempotencyRecord, error) {
 	data, err := s.client.Get(ctx, s.redisKey(userID, key)).Bytes()
 	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, ErrNotFound
+		}
 		return nil, err
 	}
 
