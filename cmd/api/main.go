@@ -11,6 +11,7 @@ import (
 
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/config"
 	"github.com/KozhabergenovNurzhan/E-commerce/internal/pkg/logger"
+	"github.com/KozhabergenovNurzhan/E-commerce/internal/storage"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -99,8 +100,18 @@ func buildApp(cfg *config.Config, log *slog.Logger) (*gin.Engine, error) {
 		service.NewReviewService(reviewRepo, productRepo),
 		service.NewAddressService(addressRepo, db),
 	)
+	
+	s3Storage, err := storage.NewS3Storage(context.Background(), cfg.S3.Bucket, cfg.S3.Region)
+	if err != nil {
+		log.Error("failed to init s3 storage", slog.String("err", err.Error()))
+		return nil, err
+	}
+	log.Info("s3 storage initialized", slog.String("bucket", cfg.S3.Bucket))
 
-	h := handler.NewHandler(svc, authMgr, log, db, idempotencyStore)
+	uploadHandler := handler.NewUploadHandler(s3Storage)
+
+	h := handler.NewHandler(svc, authMgr, log, db, idempotencyStore, uploadHandler)
+
 	return h.InitRoutes(), nil
 }
 

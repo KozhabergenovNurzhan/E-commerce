@@ -21,10 +21,18 @@ type Handler struct {
 	logger           *slog.Logger
 	db               *sqlx.DB
 	idempotencyStore *cache.IdempotencyStore
+	uploadHandler    *UploadHandler
 }
 
-func NewHandler(services *service.Services, authMgr auth.Manager, logger *slog.Logger, db *sqlx.DB, idempotencyStore *cache.IdempotencyStore) *Handler {
-	return &Handler{services: services, authMgr: authMgr, logger: logger, db: db, idempotencyStore: idempotencyStore}
+func NewHandler(services *service.Services, authMgr auth.Manager, logger *slog.Logger, db *sqlx.DB, idempotencyStore *cache.IdempotencyStore, uploadHandler *UploadHandler) *Handler {
+	return &Handler{
+		services:         services,
+		authMgr:          authMgr,
+		logger:           logger,
+		db:               db,
+		idempotencyStore: idempotencyStore,
+		uploadHandler:    uploadHandler,
+	}
 }
 
 func (h *Handler) InitRoutes() *gin.Engine {
@@ -69,6 +77,9 @@ func (h *Handler) InitRoutes() *gin.Engine {
 			products.PUT("/:id", middleware.RequireRole(models.RoleAdmin, models.RoleSeller), h.UpdateProduct)
 			products.DELETE("/:id", middleware.RequireRole(models.RoleAdmin, models.RoleSeller), h.DeleteProduct)
 		}
+
+		// Upload — authenticated users (sellers/admins) могут загружать изображения
+		protected.POST("/upload/product-image", middleware.RequireRole(models.RoleAdmin, models.RoleSeller), h.uploadHandler.UploadProductImage)
 
 		// Cart — authenticated customers
 		cart := protected.Group("/cart")

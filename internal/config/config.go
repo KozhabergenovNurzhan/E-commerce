@@ -8,11 +8,12 @@ import (
 )
 
 type Config struct {
-	Port     string
-	DB       DBConfig
-	JWT      JWTConfig
-	Redis    RedisConfig
-	LogLevel slog.Level
+	Port      string
+	DB        DBConfig
+	JWT       JWTConfig
+	Redis     RedisConfig
+	S3        S3Config
+	LogLevel  slog.Level
 	LogFormat string // "text" | "json"
 }
 
@@ -35,6 +36,11 @@ type RedisConfig struct {
 	Addr     string
 	Password string
 	DB       int
+}
+
+type S3Config struct {
+	Region string
+	Bucket string
 }
 
 // DSN returns a key-value connection string used by pgx stdlib driver.
@@ -73,6 +79,10 @@ func Load() *Config {
 			Addr:     getEnv("REDIS_ADDR", "localhost:6379"),
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       0,
+		},
+		S3: S3Config{
+			Region: getEnv("AWS_REGION", "us-east-1"),
+			Bucket: getEnv("S3_BUCKET", ""),
 		},
 		LogLevel:  parseLogLevel(getEnv("LOG_LEVEL", "info")),
 		LogFormat: getEnv("LOG_FORMAT", "text"),
