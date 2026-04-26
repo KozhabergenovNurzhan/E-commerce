@@ -1,10 +1,11 @@
 # E-commerce REST API
 
-A production-ready e-commerce backend built with Go, Gin, PostgreSQL, Redis, and JWT authentication.
+A production-ready e-commerce backend built with Go, Gin, PostgreSQL, Redis, AWS S3, and JWT authentication. Deployed on AWS EC2 with managed RDS database.
 
 ## Tech Stack
 
-- **Go** — language
+### Backend
+- **Go 1.24** — language
 - **Gin** — HTTP framework
 - **PostgreSQL 16** — primary database (sqlx + pgx)
 - **Redis 7** — caching (products, categories) and idempotency
@@ -12,7 +13,41 @@ A production-ready e-commerce backend built with Go, Gin, PostgreSQL, Redis, and
 - **JWT (HS256)** — access tokens (15m) + refresh tokens (7d, rotation)
 - **bcrypt** — password hashing
 - **slog** — structured logging (text for terminal, JSON for Grafana/Prometheus)
-- **Docker + docker-compose** — containerized development
+
+### Cloud Infrastructure (AWS)
+- **EC2** — application hosting (Amazon Linux 2023, t3.micro)
+- **RDS PostgreSQL** — managed database with automated backups and SSL
+- **S3** — object storage for product images
+- **IAM** — scoped credentials for S3 access
+
+### DevOps
+- **Docker + docker-compose** — containerized development and deployment
+- **Multi-stage Dockerfile** — minimal production image
+
+## Architecture Overview
+
+```
+┌─────────────┐
+│   Client    │
+└──────┬──────┘
+       │ HTTPS
+       ▼
+┌─────────────────┐         ┌──────────────┐
+│  EC2 (Gin API)  │────────▶│   AWS RDS    │
+│   - JWT Auth    │         │ (PostgreSQL) │
+│   - Validation  │         └──────────────┘
+│   - Business    │
+│     Logic       │         ┌──────────────┐
+│                 │────────▶│    Redis     │
+│                 │         │  (cache +    │
+│                 │         │ idempotency) │
+│                 │         └──────────────┘
+│                 │
+│                 │         ┌──────────────┐
+│                 │────────▶│    AWS S3    │
+│                 │         │ (images)     │
+└─────────────────┘         └──────────────┘
+```
 
 ## Getting Started
 
@@ -27,10 +62,7 @@ App starts on `http://localhost:8080`. PostgreSQL, Redis and migrations run auto
 ### Run locally
 
 ```bash
-# 1. Start database and cache
 docker-compose up -d postgres redis
-
-# 2. Copy env and run
 cp .env.example .env
 go run ./cmd/api
 ```
@@ -54,12 +86,16 @@ go test ./...
 | `DB_USER` | `postgres` | Database user |
 | `DB_PASSWORD` | `postgres` | Database password |
 | `DB_NAME` | `ecommerce_db` | Database name |
-| `DB_SSLMODE` | `disable` | SSL mode |
+| `DB_SSLMODE` | `disable` | SSL mode (`require` for RDS) |
 | `JWT_SECRET` | `change-me-in-production` | HMAC signing secret |
 | `JWT_ACCESS_TTL` | `15m` | Access token lifetime |
 | `JWT_REFRESH_TTL` | `168h` | Refresh token lifetime (7 days) |
 | `REDIS_ADDR` | `localhost:6379` | Redis address |
 | `REDIS_PASSWORD` | _(empty)_ | Redis password |
+| `AWS_REGION` | `us-east-1` | AWS region for S3 |
+| `AWS_ACCESS_KEY_ID` | _(required)_ | IAM user access key |
+| `AWS_SECRET_ACCESS_KEY` | _(required)_ | IAM user secret key |
+| `S3_BUCKET` | _(required)_ | S3 bucket name for images |
 
 ## API
 
@@ -83,6 +119,14 @@ Full Postman guide: [`docs/postman-guide.md`](docs/postman-guide.md)
 | POST | `/api/v1/products` | Admin, Seller | Create product |
 | PUT | `/api/v1/products/:id` | Admin, Seller | Update product |
 | DELETE | `/api/v1/products/:id` | Admin, Seller | Soft-delete product |
+
+### File Upload (S3)
+
+| Method | Path | Access | Description |
+|--------|------|--------|-------------|
+| POST | `/api/v1/upload/product-image` | Admin, Seller | Upload image to S3, returns public URL |
+
+Constraints: max 5MB, JPEG/PNG/WebP only. Files stored under `products/<uuid>.<ext>` in the configured S3 bucket.
 
 ### Categories
 
@@ -135,12 +179,13 @@ Full Postman guide: [`docs/postman-guide.md`](docs/postman-guide.md)
 |------|-------------|
 | `customer` | Own profile, cart, own orders |
 | `manager` | Update order status, update categories |
-| `seller` | Create and manage own products |
+| `seller` | Create and manage own products, upload images |
 | `admin` | Full access |
 
 ## Auth Flow
 
 Protected routes require:
+
 ```
 Authorization: Bearer <access_token>
 ```
@@ -155,7 +200,7 @@ On expiry, call `POST /api/v1/auth/refresh` with `{"refresh_token": "..."}` to g
 Idempotency-Key: <any-unique-string>
 ```
 
-Responses are cached in Redis for 24 hours, scoped per user.
+Responses are cached in Redis for 24 hours, scoped per user. The middleware uses **fail-closed** strategy — if Redis is unavailable, requests return `503 Service Unavailable` to prevent duplicate operations.
 
 ## Order Status Flow
 
@@ -165,6 +210,32 @@ pending → cancelled
 ```
 
 Only forward transitions are allowed. Cancellation is only possible from `pending`.
+
+## Deployment
+
+### AWS Production Setup
+
+The application is designed to run on AWS with the following services:
+
+1. **EC2 instance** (t3.micro) running Docker Compose
+2. **RDS PostgreSQL** (db.t4g.micro) for managed database with SSL
+3. **S3 bucket** for product images with public-read access
+4. **IAM user** with scoped S3 permissions
+
+Application connects to RDS via SSL (`DB_SSLMODE=require`) and uploads files to S3 using AWS SDK v2.
+
+### Quick Deploy to EC2
+
+```bash
+git clone https://github.com/KozhabergenovNurzhan/E-commerce.git
+cd E-commerce
+
+nano .env
+
+docker-compose up -d --build
+
+curl http://localhost:8080/health
+```
 
 ## Project Structure
 
@@ -185,6 +256,7 @@ internal/
     utils/           # Shared utilities
   repository/        # PostgreSQL data access (sqlx)
   service/           # Business logic
+  storage/           # AWS S3 client for file uploads
   testutil/          # Shared mock repositories for unit tests
 migrations/          # golang-migrate SQL files
 ```
